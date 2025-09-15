@@ -1961,6 +1961,23 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
         const uint8_t framing = mavlink_frame_char_buffer(channel_buffer(), channel_status(), c, &msg, &status);
         if (framing == MAVLINK_FRAMING_OK) {
             hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
+            
+             // descifrado
+                if (msg.magic == 0xFD) {  // MAVLink v2
+                
+                if (!ascon_decrypt_msg_payload_inplace(&msg)) {
+                    
+                    parsed_packet = true;
+                    gcs_alternative_active[chan] = false;
+                    alternative.last_mavlink_ms = now_ms;
+                    hal.util->persistent_data.last_mavlink_msgid = 0;
+                
+                    continue;
+                }
+                
+            }
+            // descifrado
+
             packetReceived(status, msg);
             parsed_packet = true;
             gcs_alternative_active[chan] = false;
@@ -2127,7 +2144,7 @@ void GCS_MAVLINK::log_mavlink_stats()
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
 #endif
-
+} //Corrección
 /*
   send the SYSTEM_TIME message
  */

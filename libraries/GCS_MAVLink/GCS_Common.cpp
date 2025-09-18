@@ -2062,30 +2062,28 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
         if (framing == MAVLINK_FRAMING_OK) {
             hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
 
-            
-            //mio 
+            // --- desencriptado ANTES de entregar el mensaje ---
+            chacha_init_once();
 
-            if (mavlink_parse_char(chan, c, &msg, &status)) {
+            if (msg.magic == MAVLINK_V2_STX &&
+                (msg.incompat_flags & MAVLINK_IFLAG_SIGNED) == 0) {
 
-                chacha_init_once();
-
-                if (msg.magic == MAVLINK_V2_STX &&
-                    (msg.incompat_flags & MAVLINK_IFLAG_SIGNED) == 0) {
-
-                    if (!chacha_decrypt_msg_payload_inplace(&msg)) {
-                        continue;
-                    }
+                // deja msg.payload en claro y ajusta msg.len; si falla, descarta
+                if (!chacha_decrypt_msg_payload_inplace(&msg)) {
+                    hal.util->persistent_data.last_mavlink_msgid = 0; // limpiar
+                    continue; // descarta paquete
                 }
-
-                packetReceived(status, msg);
             }
+            // --- fin hook de decrypt ---
+
+            packetReceived(status, msg);
 
             parsed_packet = true;
             gcs_alternative_active[chan] = false;
             alternative.last_mavlink_ms = now_ms;
             hal.util->persistent_data.last_mavlink_msgid = 0;
-
         }
+        
 #if AP_SCRIPTING_ENABLED
         else if (framing == MAVLINK_FRAMING_BAD_CRC) {
             // This may be a valid message that we don't know the crc extra for, pass it to scripting which might

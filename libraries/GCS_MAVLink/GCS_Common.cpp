@@ -1922,7 +1922,7 @@ void GCS_MAVLINK::packetReceived(const mavlink_status_t &status,
 
 //Mi codigo
 
-// AAD = header MAVLink v2 (10 bytes). Si autenticas LEN, usa el "nuevo" en ambos lados.
+// AAD = header MAVLink v2 (10 bytes).
 static inline uint32_t build_aad_v2(uint8_t aad[10],
                                     uint8_t len_field,        // <-- nuevo
                                     uint8_t incompat_flags,
@@ -1932,8 +1932,8 @@ static inline uint32_t build_aad_v2(uint8_t aad[10],
                                     uint8_t compid,
                                     uint32_t msgid)
 {
-    aad[0] = 0xFD;                 // magic
-    aad[1] = len_field;            // autenticar LEN (el NUEVO)
+    aad[0] = 0xFD;              
+    aad[1] = len_field;           
     aad[2] = incompat_flags;
     aad[3] = compat_flags;
     aad[4] = seq;
@@ -2006,8 +2006,7 @@ static bool chacha_decrypt_msg_payload_inplace(mavlink_message_t *msg)
         return false; // autenticación falló
     }
 
-    msg->len = (uint8_t)cipher_len; // quita el tag (deja solo plaintext)
-    // opcional: memset(tag, 0, CHACHA_TAG_LEN);
+    msg->len = (uint8_t)cipher_len;
     return true;
 }
 
@@ -2062,13 +2061,13 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
         if (framing == MAVLINK_FRAMING_OK) {
             hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
 
-            // --- desencriptado ANTES de entregar el mensaje ---
+            // descifrar ANTES de entregar el mensaje
             chacha_init_once();
 
             if (msg.magic == MAVLINK_V2_STX &&
                 (msg.incompat_flags & MAVLINK_IFLAG_SIGNED) == 0) {
 
-                // deja msg.payload en claro y ajusta msg.len; si falla, descarta
+                
                 if (!chacha_decrypt_msg_payload_inplace(&msg)) {
                     hal.util->persistent_data.last_mavlink_msgid = 0; // limpiar
                     continue; // descarta paquete
@@ -2083,7 +2082,7 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
             alternative.last_mavlink_ms = now_ms;
             hal.util->persistent_data.last_mavlink_msgid = 0;
         }
-        
+
 #if AP_SCRIPTING_ENABLED
         else if (framing == MAVLINK_FRAMING_BAD_CRC) {
             // This may be a valid message that we don't know the crc extra for, pass it to scripting which might

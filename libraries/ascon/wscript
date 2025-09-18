@@ -1,7 +1,0 @@
-def build(bld):
-    bld(
-        features = 'c',
-        source   = ['aead.c'],  
-        includes = ['.'],       
-        name     = 'ascon'
-    )

@@ -5,9 +5,6 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_Networking/AP_Networking_Config.h>
 
-//Mi declaración
-extern ascon_ctx_t g_ascon_ctx;
-
 // we have separate helpers disabled to make it possible
 // to select MAVLink 1.0 in the arduino GUI build
 #define MAVLINK_SEPARATE_HELPERS

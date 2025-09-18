@@ -30,16 +30,6 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 
-//Mis include
-
-#include <stdint.h>
-#include <string.h>
-
-#include "ascon/api.h"
-#include "ascon/aead.h"  
-
-// Termina mis
-
 extern const AP_HAL::HAL& hal;
 
 #ifdef MAVLINK_SEPARATE_HELPERS
@@ -137,36 +127,6 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
     return link->txspace();
 }
 
-//Uso ascon_ctx_t
-struct ascon_ctx_t {
-    uint8_t  key[CRYPTO_KEYBYTES]; // PSK 128-bit
-    uint64_t iv_boot;              // cambia cada boot/rekey
-};
-extern ascon_ctx_t g_ascon_ctx;
-
-
-// ===== MAVLink v2 constants =====
-#define MAVLINK_V2_STX       0xFD
-#define MAVLINK_V2_HDR_LEN   10
-#define MAVLINK_V2_SIG_LEN   13
-#define MAVLINK_IFLAG_SIGNED 0x01
-
-//Construir el nonce para ASCON:
-// A 128-bit value is used only once, ensuring
-// that the ciphertext differs for each nonce. This prevents
-// various attacks on the communication.
-static inline void build_nonce(uint8_t npub[CRYPTO_NPUBBYTES],
-                               uint64_t iv_boot,
-                               uint8_t sysid, uint8_t compid, uint8_t seq)
-{
-    // [ iv_boot(8) | sysid(1) | compid(1) | seq(1) | pad(5) ] = 16 bytes
-    memcpy(&npub[0], &iv_boot, 8);
-    npub[8]  = sysid;
-    npub[9]  = compid;
-    npub[10] = seq;
-    memset(&npub[11], 0, 5);
-}
-
 /*
   send a buffer out a MAVLink channel
  */
@@ -186,91 +146,6 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         // an alternative protocol is active
         return;
     }
-
-
-        // ===== Cifrado solo para MAVLink v2 sin firma =====
-    if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
-        const uint8_t  in_payload_len = buf[1];
-        const uint8_t  incompat_flags = buf[2];
-        const uint8_t  compat_flags   = buf[3];
-        const uint8_t  seq            = buf[4];
-        const uint8_t  sysid          = buf[5];
-        const uint8_t  compid         = buf[6];
-        const uint32_t msgid          = (uint32_t)buf[7] | ((uint32_t)buf[8] << 8) | ((uint32_t)buf[9] << 16);
-
-        const uint16_t plain_total_no_sig = (uint16_t)MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +CRC
-        const bool     signed_frame       = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
-
-        // Solo tratamos frames sin firma y con longitud exacta (sin firma)
-        if (!signed_frame && len == plain_total_no_sig) {
-
-            // ¿Cabe el tag (+CRYPTO_ABYTES) en LEN (0..255)?
-            if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
-
-                // Busca crc_extra del msgid (helper de c_library_v2)
-                const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
-                if (entry) {
-                    const uint8_t crc_extra = entry->crc_extra;
-
-                    // Buffer de salida: header + payload_cifrado + tag + CRC
-                    uint8_t out[300];
-                    memcpy(out, buf, MAVLINK_V2_HDR_LEN);  // copia header
-                    out[1] = in_payload_len + CRYPTO_ABYTES; // nuevo LEN
-
-                    // AAD + Nonce
-                    uint8_t aad[16];
-                    const size_t aad_len = build_aad(aad, incompat_flags, compat_flags, seq, sysid, compid, msgid);
-
-                    uint8_t npub[CRYPTO_NPUBBYTES];
-                    build_nonce(npub, g_ascon_ctx.iv_boot, sysid, compid, seq);
-
-                    // Punteros a payload
-                    const uint8_t *m_in  = buf + MAVLINK_V2_HDR_LEN;     // plaintext (input)
-                    uint8_t       *c_out = out + MAVLINK_V2_HDR_LEN;     // ciphertext (output)
-
-                    // Llama a tu ASCON: c_out queda [ciphertext || tag]; clen = mlen + CRYPTO_ABYTES
-                    unsigned long long clen_out = 0ULL;
-                    int rc = crypto_aead_encrypt(/*c=*/(unsigned char*)c_out,
-                                                 /*clen=*/&clen_out,
-                                                 /*m=*/(const unsigned char*)m_in,
-                                                 /*mlen=*/(unsigned long long)in_payload_len,
-                                                 /*ad=*/(const unsigned char*)aad,
-                                                 /*adlen=*/(unsigned long long)aad_len,
-                                                 /*nsec=*/nullptr,
-                                                 /*npub=*/(const unsigned char*)npub,
-                                                 /*k=*/(const unsigned char*)g_ascon_ctx.key);
-                    if (rc == 0 && clen_out == (unsigned long long)(in_payload_len + CRYPTO_ABYTES)) {
-                        // Recalcular CRC sobre NUEVO payload (ciphertext) + crc_extra
-                        uint16_t crc;
-                        crc_init(&crc);
-                        crc_accumulate_buffer(&crc, c_out, out[1]); // out[1] = nuevo LEN
-                        crc_accumulate(crc_extra, &crc);
-
-                        // Escribir CRC al final
-                        const uint16_t payload_end = (uint16_t)MAVLINK_V2_HDR_LEN + out[1];
-                        out[payload_end + 0] = (uint8_t)(crc & 0xFF);
-                        out[payload_end + 1] = (uint8_t)(crc >> 8);
-
-                        const uint8_t out_len = (uint8_t)(payload_end + 2);
-
-                        // Enviar frame cifrado
-                        const size_t written = mavlink_comm_port[chan]->write(out, out_len);
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-                        if (written < out_len && !mavlink_comm_port[chan]->is_write_locked()) {
-                            AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, out_len);
-                        }
-#endif
-                        return; // listo (cifrado y enviado)
-                    }
-                    // si ASCON falla, hacemos fallback en claro
-                }
-            }
-        }
-    }
-
-
-
-
 
     const size_t written = mavlink_comm_port[chan]->write(buf, len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL

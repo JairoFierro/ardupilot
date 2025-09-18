@@ -78,6 +78,14 @@
 #include <AP_Notify/AP_Notify.h>
 #include <AP_Vehicle/AP_Vehicle_config.h>
 
+//Mi include
+#define CHACHA_KEY_LEN   32
+#define CHACHA_NONCE_LEN 12
+#define CHACHA_TAG_LEN   16
+#include <sys/random.h>
+#include "Hacl_AEAD_Chacha20Poly1305_Simd128.h"
+#include "GCS_Crypto.h"
+
 #include <stdio.h>
 
 #if AP_RADIO_ENABLED
@@ -1912,6 +1920,98 @@ void GCS_MAVLINK::packetReceived(const mavlink_status_t &status,
     handle_message(msg);
 }
 
+//Mi codigo
+
+// AAD = header MAVLink v2 (10 bytes). Si autenticas LEN, usa el "nuevo" en ambos lados.
+static inline uint32_t build_aad_v2(uint8_t aad[10],
+                                    uint8_t len_field,        // <-- nuevo
+                                    uint8_t incompat_flags,
+                                    uint8_t compat_flags,
+                                    uint8_t seq,
+                                    uint8_t sysid,
+                                    uint8_t compid,
+                                    uint32_t msgid)
+{
+    aad[0] = 0xFD;                 // magic
+    aad[1] = len_field;            // autenticar LEN (el NUEVO)
+    aad[2] = incompat_flags;
+    aad[3] = compat_flags;
+    aad[4] = seq;
+    aad[5] = sysid;
+    aad[6] = compid;
+    aad[7] = (uint8_t)(msgid & 0xFF);
+    aad[8] = (uint8_t)((msgid >> 8) & 0xFF);
+    aad[9] = (uint8_t)((msgid >> 16) & 0xFF);
+    return 10;
+}
+
+static inline void build_nonce12_scq(uint8_t n[CHACHA_NONCE_LEN],
+                                     uint64_t iv_boot,
+                                     uint8_t sysid,
+                                     uint8_t compid,
+                                     uint8_t seq)
+{
+    memcpy(n, &iv_boot, 8);  // 8 bytes
+    n[8]  = sysid;           // 1
+    n[9]  = compid;          // 1
+    n[10] = seq;             // 1
+    n[11] = 0;               // 1 (pad)
+}
+
+
+
+static bool chacha_decrypt_msg_payload_inplace(mavlink_message_t *msg)
+{
+    if (msg->magic != MAVLINK_V2_STX) {
+        return true; // solo MAVLink v2
+    }
+    if ((msg->incompat_flags & MAVLINK_IFLAG_SIGNED) != 0) {
+        return true; // deja intactos los frames firmados
+    }
+    if (msg->len < CHACHA_TAG_LEN) {
+        return false; // no cabe el tag
+    }
+
+    const uint8_t new_len = msg->len;                    // LEN tal cual viene (cipher+tag)
+    const uint32_t cipher_len = (uint32_t)new_len - CHACHA_TAG_LEN;
+
+    // AAD = header v2 con LEN nuevo (coherente con TX)
+    uint8_t aad[10];
+    const uint32_t aad_len = build_aad_v2(
+        aad, new_len,
+        msg->incompat_flags, msg->compat_flags,
+        msg->seq, msg->sysid, msg->compid, msg->msgid
+    );
+
+    // Nonce = iv_boot(8) | sysid | compid | seq | 0
+    uint8_t nonce[CHACHA_NONCE_LEN];
+    build_nonce12_scq(nonce, g_chacha_ctx.iv_boot, msg->sysid, msg->compid, msg->seq);
+
+    // [cipher || tag]
+    uint8_t *payload = _MAV_PAYLOAD_NON_CONST(msg);
+    uint8_t *tag = payload + cipher_len;
+
+    uint32_t ok = Hacl_AEAD_Chacha20Poly1305_Simd128_decrypt(
+        /*output=*/payload,
+        /*input=*/payload,
+        /*input_len=*/(uint32_t)cipher_len,
+        /*data=*/aad,
+        /*data_len=*/aad_len,
+        /*key=*/g_chacha_ctx.key,
+        /*nonce=*/nonce,
+        /*tag=*/tag
+    );
+
+    if (ok != 0) {
+        return false; // autenticación falló
+    }
+
+    msg->len = (uint8_t)cipher_len; // quita el tag (deja solo plaintext)
+    // opcional: memset(tag, 0, CHACHA_TAG_LEN);
+    return true;
+}
+
+
 void
 GCS_MAVLINK::update_receive(uint32_t max_time_us)
 {
@@ -1961,8 +2061,25 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
         const uint8_t framing = mavlink_frame_char_buffer(channel_buffer(), channel_status(), c, &msg, &status);
         if (framing == MAVLINK_FRAMING_OK) {
             hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
+
             
-            packetReceived(status, msg);
+            //mio 
+
+            if (mavlink_parse_char(chan, c, &msg, &status)) {
+
+                chacha_init_once();
+
+                if (msg.magic == MAVLINK_V2_STX &&
+                    (msg.incompat_flags & MAVLINK_IFLAG_SIGNED) == 0) {
+
+                    if (!chacha_decrypt_msg_payload_inplace(&msg)) {
+                        continue;
+                    }
+                }
+
+                packetReceived(status, msg);
+            }
+
             parsed_packet = true;
             gcs_alternative_active[chan] = false;
             alternative.last_mavlink_ms = now_ms;

@@ -37,6 +37,9 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <stdint.h>
 #include <string.h>
 
+// ASCON crypto includes
+#include "../ascon/api.h"
+#include "../ascon/crypto_aead.h"
 
 // Termina mis
 

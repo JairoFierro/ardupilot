@@ -5,6 +5,10 @@
 
 #ifdef AP_MAVLINK_ENCRYPT
 
+extern "C" {
+#include "../ascon/crypto_aead.h"
+}
+
 static inline void ascon_build_nonce(uint8_t npub[CRYPTO_NPUBBYTES],
                                      uint64_t iv_boot,
                                      uint8_t sysid, uint8_t compid, uint8_t seq)

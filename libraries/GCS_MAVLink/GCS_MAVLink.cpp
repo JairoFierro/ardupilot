@@ -38,12 +38,6 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <string.h>
 
 
-#ifdef AP_MAVLINK_ENCRYPT
-extern "C" {
-#include "ascon/api.h"
-}
-#endif
-
 // Termina mis
 
 extern const AP_HAL::HAL& hal;
@@ -144,6 +138,11 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
 }
 
 #ifdef AP_MAVLINK_ENCRYPT
+
+
+extern "C" {
+#include "ascon/api.h"
+}
 
 //Uso ascon_ctx_t
 struct ascon_ctx_t {

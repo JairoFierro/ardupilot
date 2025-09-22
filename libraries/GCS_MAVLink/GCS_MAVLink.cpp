@@ -174,6 +174,26 @@ static inline void build_nonce(uint8_t npub[CRYPTO_NPUBBYTES],
     npub[10] = seq;
     memset(&npub[11], 0, 5);
 }
+
+static inline size_t build_aad(uint8_t *aad,
+                               uint8_t incompat_flags,
+                               uint8_t compat_flags,
+                               uint8_t seq,
+                               uint8_t sysid,
+                               uint8_t compid,
+                               uint32_t msgid)
+{
+    // [incompat|compat|seq|sysid|compid|msgid(3)] = 8 bytes
+    aad[0] = incompat_flags;
+    aad[1] = compat_flags;
+    aad[2] = seq;
+    aad[3] = sysid;
+    aad[4] = compid;
+    aad[5] = (uint8_t)(msgid & 0xFF);
+    aad[6] = (uint8_t)((msgid >> 8) & 0xFF);
+    aad[7] = (uint8_t)((msgid >> 16) & 0xFF);
+    return 8;
+}
 #endif
 
 /*

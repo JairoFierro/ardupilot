@@ -20,6 +20,7 @@ This provides some support code and variables for MAVLink enabled sketches
 
 */
 
+
 #include "GCS_config.h"
 
 #if HAL_MAVLINK_BINDINGS_ENABLED
@@ -35,8 +36,11 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <stdint.h>
 #include <string.h>
 
-#include "ascon/api.h"
-#include "ascon/aead.h"  
+
+
+#ifdef AP_MAVLINK_ENCRYPT
+extern "C" { #include "ascon/api.h" }
+#endif
 
 // Termina mis
 
@@ -137,6 +141,8 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
     return link->txspace();
 }
 
+#ifdef AP_MAVLINK_ENCRYPT
+
 //Uso ascon_ctx_t
 struct ascon_ctx_t {
     uint8_t  key[CRYPTO_KEYBYTES]; // PSK 128-bit
@@ -166,6 +172,7 @@ static inline void build_nonce(uint8_t npub[CRYPTO_NPUBBYTES],
     npub[10] = seq;
     memset(&npub[11], 0, 5);
 }
+#endif
 
 /*
   send a buffer out a MAVLink channel

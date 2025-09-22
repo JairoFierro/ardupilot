@@ -2,6 +2,8 @@
 
 def build(bld):
     vehicle = bld.path.name
+
+    # 1) Libs estándar del vehículo (igual que antes)
     bld.ap_stlib(
         name=vehicle + '_libs',
         ap_vehicle=vehicle,
@@ -24,20 +26,36 @@ def build(bld):
             'AP_Devo_Telem',
             'AC_AutoTune',
             'AP_KDECAN',
-            'AP_SurfaceDistance'
+            'AP_SurfaceDistance',
         ],
     )
 
+    # 2) NUEVA librería: ascon  (añade aquí todos tus .c/.cpp reales)
+    ASCON_SRC = [
+        '../libraries/ascon/aead.c',
+        '../libraries/ascon/ascon_ctx.cpp',
+    ]
+    ASCON_INC = [
+        '../libraries/ascon',
+    ]
+    bld.ap_library(
+        name='ascon',
+        src=ASCON_SRC,
+        includes=ASCON_INC,
+    )
+
+    # 3) Programas: enlazar también contra 'ascon'
     bld.ap_program(
         program_name='arducopter',
         program_groups=['bin', 'copter'],
-        use=vehicle + '_libs',
-        defines=['FRAME_CONFIG=MULTICOPTER_FRAME'],
-        )
+        use=[vehicle + '_libs', 'ascon'],   # <- aquí usamos la lib
+        defines=['FRAME_CONFIG=MULTICOPTER_FRAME', 'AP_MAVLINK_ENCRYPT'],
+    )
 
     bld.ap_program(
         program_name='arducopter-heli',
         program_groups=['bin', 'heli'],
-        use=vehicle + '_libs',
+        use=[vehicle + '_libs', 'ascon'],   # <- también aquí
         defines=['FRAME_CONFIG=HELI_FRAME'],
-        )
+    )
+

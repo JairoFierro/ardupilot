@@ -5,8 +5,10 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_Networking/AP_Networking_Config.h>
 
-//Mi declaración
-extern ascon_ctx_t g_ascon_ctx;
+#ifdef AP_MAVLINK_ENCRYPT
+bool ascon_encrypt_msg_payload_inplace(mavlink_message_t* msg);
+bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg);
+#endif
 
 // we have separate helpers disabled to make it possible
 // to select MAVLink 1.0 in the arduino GUI build

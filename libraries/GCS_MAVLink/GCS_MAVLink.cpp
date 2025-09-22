@@ -142,18 +142,7 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
 
 #ifdef AP_MAVLINK_ENCRYPT
 
-
-extern "C" {
-#include "ascon/api.h"
-}
-
-//Uso ascon_ctx_t
-struct ascon_ctx_t {
-    uint8_t  key[CRYPTO_KEYBYTES]; // PSK 128-bit
-    uint64_t iv_boot;              // cambia cada boot/rekey
-};
-extern ascon_ctx_t g_ascon_ctx;
-
+#include "ascon_ctx.h"
 
 // ===== MAVLink v2 constants =====
 #define MAVLINK_V2_STX       0xFD

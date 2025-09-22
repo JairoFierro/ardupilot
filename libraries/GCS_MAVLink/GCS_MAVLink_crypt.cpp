@@ -1,17 +1,9 @@
 #include "GCS_MAVLink.h"      
 #include "GCS_MAVLink_crypt.h"
+#include "ascon_ctx.h"
 #include <string.h>
 
 #ifdef AP_MAVLINK_ENCRYPT
-extern "C" {
-#include "ascon/api.h"           
-}
-
-// Contexto global (debes definirlo en algún .cpp y cargar la clave/iv_boot allí)
-extern struct ascon_ctx_t {
-    uint8_t  key[CRYPTO_KEYBYTES]; // 16B
-    uint64_t iv_boot;              // cambia en cada boot/rekey
-} g_ascon_ctx;
 
 static inline void ascon_build_nonce(uint8_t npub[CRYPTO_NPUBBYTES],
                                      uint64_t iv_boot,

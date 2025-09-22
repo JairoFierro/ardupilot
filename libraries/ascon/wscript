@@ -1,7 +1,7 @@
 def build(bld):
     bld(
-        features = 'c',
-        source   = ['aead.c'],  
+        features = 'c cxx',
+        source   = ['aead.c', 'ascon_ctx.cpp'],  
         includes = ['.'],       
         name     = 'ascon'
     )

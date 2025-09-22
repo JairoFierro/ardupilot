@@ -3,9 +3,9 @@
 def build(bld):
     vehicle = bld.path.name
 
-    # 1) Libs estándar del vehículo (igual que antes)
+    # Librerías comunes del vehículo (igual que ya estaba)
     bld.ap_stlib(
-        name=vehicle + '_libs',
+        target=vehicle + '_libs',
         ap_vehicle=vehicle,
         ap_libraries=bld.ap_common_vehicle_libraries() + [
             'AC_AttitudeControl',
@@ -30,7 +30,7 @@ def build(bld):
         ],
     )
 
-    # 2) NUEVA librería: ascon  (añade aquí todos tus .c/.cpp reales)
+    # --- NUEVA librería: ascon ---
     ASCON_SRC = [
         '../libraries/ascon/aead.c',
         '../libraries/ascon/ascon_ctx.cpp',
@@ -38,24 +38,30 @@ def build(bld):
     ASCON_INC = [
         '../libraries/ascon',
     ]
+
     bld.ap_library(
-        name='ascon',
+        target='ascon',          # <- en ArduPilot es 'target', no 'name'
         src=ASCON_SRC,
         includes=ASCON_INC,
     )
 
-    # 3) Programas: enlazar también contra 'ascon'
+    # Binario multicóptero
     bld.ap_program(
-        program_name='arducopter',
+        target='arducopter',                 # <- no 'program_name'
         program_groups=['bin', 'copter'],
-        use=[vehicle + '_libs', 'ascon'],   # <- aquí usamos la lib
+        use=[vehicle + '_libs', 'ascon'],    # <- enlaza contra la lib ascon
         defines=['FRAME_CONFIG=MULTICOPTER_FRAME', 'AP_MAVLINK_ENCRYPT'],
+        # si necesitas que los headers de ascon estén visibles aquí también:
+        includes=ASCON_INC,
     )
 
+    # Binario heli
     bld.ap_program(
-        program_name='arducopter-heli',
+        target='arducopter-heli',
         program_groups=['bin', 'heli'],
-        use=[vehicle + '_libs', 'ascon'],   # <- también aquí
-        defines=['FRAME_CONFIG=HELI_FRAME'],
+        use=[vehicle + '_libs', 'ascon'],
+        defines=['FRAME_CONFIG=HELI_FRAME', 'AP_MAVLINK_ENCRYPT'],
+        includes=ASCON_INC,
     )
+
 

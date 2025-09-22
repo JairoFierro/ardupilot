@@ -1,12 +1,10 @@
 #pragma once
 
+#include "ascon.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-// Forward declaration for ascon_state_t
-struct ascon_state;
-typedef struct ascon_state ascon_state_t;
 
 // Debug print functions - empty implementations for release builds
 static inline void print(const char* text) { (void)text; }

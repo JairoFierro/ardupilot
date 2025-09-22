@@ -207,9 +207,11 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         return;
     }
 
-
+    printf("Verificando condiciones de cifrado...\n");
         // ===== Cifrado solo para MAVLink v2 sin firma =====
     if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
+
+        printf("Entró...\n");
         const uint8_t  in_payload_len = buf[1];
         const uint8_t  incompat_flags = buf[2];
         const uint8_t  compat_flags   = buf[3];

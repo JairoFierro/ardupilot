@@ -274,7 +274,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                         // Recalcular CRC sobre NUEVO payload (ciphertext) + crc_extra
                         uint16_t crc;
                         crc_init(&crc);
-                        crc_accumulate_buffer(&crc, c_out, out[1]); // out[1] = nuevo LEN
+                        crc_accumulate_buffer(&crc, (const char*)c_out, out[1]); // out[1] = nuevo LEN
                         crc_accumulate(crc_extra, &crc);
 
                         // Escribir CRC al final

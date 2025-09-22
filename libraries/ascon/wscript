@@ -6,6 +6,7 @@ def build(bld):
     bld(
         features = 'c cxx',
         source   = ['aead.c', 'ascon_ctx.cpp'],  
-        includes = ['.'],       
+        includes = ['.'],
+        defines  = ['AP_MAVLINK_ENCRYPT=1'],
         name     = 'ascon'
     )

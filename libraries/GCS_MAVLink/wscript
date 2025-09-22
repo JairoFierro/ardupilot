@@ -1,0 +1,13 @@
+def configure(cfg):
+    # No special configuration needed
+    pass
+
+def build(bld):
+    bld(
+        features = 'cxx',
+        source   = ['GCS_MAVLink_crypt.cpp'],
+        includes = ['.'],
+        defines  = ['AP_MAVLINK_ENCRYPT=1'],
+        use      = ['ascon'],
+        name     = 'GCS_MAVLink_crypt'
+    )

@@ -30,7 +30,7 @@ def build(bld):
         ],
     )
 
-    # 2) Lib ascon
+    # 2) Lib ascon: ap_library usa name=
     ASCON_SRC = [
         '../libraries/ascon/aead.c',
         '../libraries/ascon/ascon_ctx.cpp',
@@ -39,14 +39,14 @@ def build(bld):
         '../libraries/ascon',
     ]
     bld.ap_library(
-        target='ascon',
+        name='ascon',          # << antes pusimos target; aquí debe ser name
         src=ASCON_SRC,
         includes=ASCON_INC,
     )
 
-    # 3) Programas: enlazan contra 'ascon'
+    # 3) Programas: ap_program usa program_name=
     bld.ap_program(
-        target='arducopter',
+        program_name='arducopter',
         program_groups=['bin', 'copter'],
         use=[vehicle + '_libs', 'ascon'],
         defines=['FRAME_CONFIG=MULTICOPTER_FRAME', 'AP_MAVLINK_ENCRYPT'],
@@ -54,12 +54,13 @@ def build(bld):
     )
 
     bld.ap_program(
-        target='arducopter-heli',
+        program_name='arducopter-heli',
         program_groups=['bin', 'heli'],
         use=[vehicle + '_libs', 'ascon'],
         defines=['FRAME_CONFIG=HELI_FRAME', 'AP_MAVLINK_ENCRYPT'],
         includes=ASCON_INC,
     )
+
 
 
 

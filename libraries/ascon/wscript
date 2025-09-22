@@ -1,3 +1,7 @@
+def configure(cfg):
+    # No special configuration needed for ASCON library
+    pass
+
 def build(bld):
     bld(
         features = 'c cxx',

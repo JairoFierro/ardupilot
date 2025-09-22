@@ -5,10 +5,6 @@
 #include <AP_HAL/AP_HAL_Boards.h>
 #include <AP_Networking/AP_Networking_Config.h>
 
-#ifdef AP_MAVLINK_ENCRYPT
-bool ascon_encrypt_msg_payload_inplace(mavlink_message_t* msg);
-bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg);
-#endif
 
 // we have separate helpers disabled to make it possible
 // to select MAVLink 1.0 in the arduino GUI build
@@ -83,6 +79,11 @@ uint16_t comm_get_txspace(mavlink_channel_t chan);
 #endif  // clang
 #include "include/mavlink/v2.0/all/mavlink.h"
 #pragma GCC diagnostic pop
+
+#ifdef AP_MAVLINK_ENCRYPT
+bool ascon_encrypt_msg_payload_inplace(mavlink_message_t* msg);
+bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg);
+#endif
 
 // lock and unlock a channel, for multi-threaded mavlink send
 void comm_send_lock(mavlink_channel_t chan, uint16_t size);

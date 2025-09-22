@@ -17,6 +17,8 @@
 
 #include "GCS_config.h"
 
+#define AP_MAVLINK_ENCRYPT 1
+
 #if HAL_GCS_ENABLED
 
 #include "GCS.h"
@@ -72,6 +74,7 @@
 #include "MissionItemProtocol_Waypoints.h"
 #include "MissionItemProtocol_Rally.h"
 #include "MissionItemProtocol_Fence.h"
+#include "GCS_MAVLink_crypt.h"
 
 #include <AP_CANManager/AP_MAVLinkCAN.h>
 

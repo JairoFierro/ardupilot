@@ -610,7 +610,6 @@ def configure(cfg):
     cfg.recurse('libraries/AP_HAL_SITL')
     cfg.recurse('libraries/SITL')
     cfg.recurse('libraries/ascon')
-    cfg.recurse('libraries/GCS_MAVLink')
 
     cfg.recurse('libraries/AP_Networking')
     cfg.recurse('libraries/AP_DDS')
@@ -675,6 +674,8 @@ def configure(cfg):
 
     # add in generated flags
     cfg.env.CXXFLAGS += ['-include', 'ap_config.h']
+    cfg.env.CXXFLAGS += ['-DAP_MAVLINK_ENCRYPT=1']
+    cfg.env.CFLAGS += ['-DAP_MAVLINK_ENCRYPT=1']
 
     cfg.remove_target_list()
     _collect_autoconfig_files(cfg)
@@ -802,7 +803,6 @@ def _build_dynamic_sources(bld):
 
     bld.recurse("libraries/AP_DDS")
     bld.recurse("libraries/ascon")
-    bld.recurse("libraries/GCS_MAVLink")
 
     def write_version_header(tsk):
         bld = tsk.generator.bld

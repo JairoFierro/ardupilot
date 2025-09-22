@@ -38,9 +38,10 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <string.h>
 
 
-
 #ifdef AP_MAVLINK_ENCRYPT
-extern "C" { #include "ascon/api.h" }
+extern "C" {
+#include "ascon/api.h"
+}
 #endif
 
 // Termina mis

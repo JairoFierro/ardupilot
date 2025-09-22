@@ -3,7 +3,7 @@
 def build(bld):
     vehicle = bld.path.name
 
-    # 1) ap_stlib: usa name=
+    # 1) ap_stlib: aquí sí acepta name=
     bld.ap_stlib(
         name=vehicle + '_libs',
         ap_vehicle=vehicle,
@@ -30,7 +30,7 @@ def build(bld):
         ],
     )
 
-    # 2) Lib ascon: ap_library usa name=
+    # 2) Lib ascon: NOMBRE POSICIONAL
     ASCON_SRC = [
         '../libraries/ascon/aead.c',
         '../libraries/ascon/ascon_ctx.cpp',
@@ -39,12 +39,12 @@ def build(bld):
         '../libraries/ascon',
     ]
     bld.ap_library(
-        name='ascon',          # << antes pusimos target; aquí debe ser name
+        'ascon',                 # <-- nombre posicional, sin name=/target=
         src=ASCON_SRC,
         includes=ASCON_INC,
     )
 
-    # 3) Programas: ap_program usa program_name=
+    # 3) Programas: usa program_name=
     bld.ap_program(
         program_name='arducopter',
         program_groups=['bin', 'copter'],
@@ -60,6 +60,7 @@ def build(bld):
         defines=['FRAME_CONFIG=HELI_FRAME', 'AP_MAVLINK_ENCRYPT'],
         includes=ASCON_INC,
     )
+
 
 
 

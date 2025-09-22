@@ -2,11 +2,14 @@
 
 #include <stdint.h>
 
+// Include ASCON API first
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "ascon/api.h"
+#include "../ascon/api.h"
+#ifdef __cplusplus
+}
+#endif
 
 // ASCON context structure
 struct ascon_ctx_t {
@@ -14,9 +17,11 @@ struct ascon_ctx_t {
     uint64_t iv_boot;              // cambia en cada boot/rekey
 };
 
-// Global ASCON context
+// Global ASCON context declaration
+#ifdef __cplusplus
+extern "C" {
+#endif
 extern struct ascon_ctx_t g_ascon_ctx;
-
 #ifdef __cplusplus
 }
 #endif

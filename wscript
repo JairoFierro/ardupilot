@@ -609,6 +609,7 @@ def configure(cfg):
     cfg.recurse('libraries/AP_GPS')
     cfg.recurse('libraries/AP_HAL_SITL')
     cfg.recurse('libraries/SITL')
+    cfg.recurse('libraries/ascon')
 
     cfg.recurse('libraries/AP_Networking')
     cfg.recurse('libraries/AP_DDS')
@@ -799,6 +800,7 @@ def _build_dynamic_sources(bld):
         )
 
     bld.recurse("libraries/AP_DDS")
+    bld.recurse("libraries/ascon")
 
     def write_version_header(tsk):
         bld = tsk.generator.bld

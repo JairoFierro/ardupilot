@@ -1,7 +1,11 @@
+#include "GCS_MAVLink.h"      
 #include "GCS_MAVLink_crypt.h"
 #include <string.h>
-#include "ascon/api.h"
-#include "ascon/crypto_aead.h"
+
+#ifdef AP_MAVLINK_ENCRYPT
+extern "C" {
+#include "ascon/api.h"           
+}
 
 // Contexto global (debes definirlo en algún .cpp y cargar la clave/iv_boot allí)
 extern struct ascon_ctx_t {
@@ -90,3 +94,5 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
     msg->len = (uint8_t)mlen;
     return true;
 }
+
+#endif

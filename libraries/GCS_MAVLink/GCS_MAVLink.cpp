@@ -20,6 +20,7 @@ This provides some support code and variables for MAVLink enabled sketches
 
 */
 
+#define AP_MAVLINK_ENCRYPT 1
 
 #include "GCS_config.h"
 

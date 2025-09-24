@@ -35,7 +35,7 @@ This provides some support code and variables for MAVLink enabled sketches
 #define CHACHA_NONCE_LEN 12
 #define CHACHA_TAG_LEN   16
 #include <sys/random.h>
-#include "Hacl_AEAD_Chacha20Poly1305_Simd128.h"
+#include <hacl/include/Hacl_AEAD_Chacha20Poly1305_Simd128.h>
 #include "GCS_Crypto.h"
 
 extern const AP_HAL::HAL& hal;

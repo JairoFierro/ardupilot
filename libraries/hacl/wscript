@@ -6,23 +6,11 @@ def build(bld):
         name='hacl',
         ap_vehicle_project=False,
         ap_libraries=[],
-        includes=[
-            'include',
-            'include/krml',
-            'include/krml/internal',
-            'include/internal',
-            'minimal',
-        ],
-        export_includes=[
-            'include',
-            'include/krml', 
-            'include/krml/internal',
-            'include/internal',
-            'minimal',
-        ],
+        includes=['include'],          # aquí ya vive krml/...
+        export_includes=['include'],   # propaga esta ruta a quienes usen 'hacl'
         source=[
             'src/Hacl_AEAD_Chacha20Poly1305.c',
-            'src/Hacl_Chacha20.c', 
+            'src/Hacl_Chacha20.c',
             'src/Hacl_MAC_Poly1305.c',
-        ]
+        ],
     )

@@ -37,7 +37,7 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <stdint.h>
 #include <string.h>
 
-// ASCON crypto includes
+// ASCON libreria
 #include "../ascon/api.h"
 #include "../ascon/crypto_aead.h"
 
@@ -208,7 +208,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
     }
 
     printf("Verificando condiciones de cifrado...\n");
-        // ===== Cifrado solo para MAVLink v2 sin firma =====
+    
     if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
 
         printf("Entró...\n");
@@ -223,7 +223,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         const uint16_t plain_total_no_sig = (uint16_t)MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +CRC
         const bool     signed_frame       = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
 
-        // Solo tratamos frames sin firma y con longitud exacta (sin firma)
+        // Frames con longitud exacta
         if (!signed_frame && len == plain_total_no_sig) {
 
             // ¿Cabe el tag (+CRYPTO_ABYTES) en LEN (0..255)?
@@ -250,7 +250,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                     const uint8_t *m_in  = buf + MAVLINK_V2_HDR_LEN;     // plaintext (input)
                     uint8_t       *c_out = out + MAVLINK_V2_HDR_LEN;     // ciphertext (output)
 
-                    // Llama a tu ASCON: c_out queda [ciphertext || tag]; clen = mlen + CRYPTO_ABYTES
+                    // Llamada a ASCON: c_out queda [ciphertext || tag]; clen = mlen + CRYPTO_ABYTES
                     unsigned long long clen_out = 0ULL;
                     int rc = crypto_aead_encrypt(/*c=*/(unsigned char*)c_out,
                                                  /*clen=*/&clen_out,
@@ -282,9 +282,9 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                             AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, out_len);
                         }
 #endif
-                        return; // listo (cifrado y enviado)
+                        return;
                     }
-                    // si ASCON falla, hacemos fallback en claro
+                    
                 }
             }
         }

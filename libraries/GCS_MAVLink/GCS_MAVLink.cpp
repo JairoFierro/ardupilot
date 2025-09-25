@@ -35,7 +35,7 @@ This provides some support code and variables for MAVLink enabled sketches
 #define CHACHA_NONCE_LEN 12
 #define CHACHA_TAG_LEN   16
 #include <sys/random.h>
-#include <hacl/include/Hacl_AEAD_Chacha20Poly1305_Simd128.h>
+#include <hacl/include/Hacl_AEAD_Chacha20Poly1305.h>
 #include "GCS_Crypto.h"
 
 extern const AP_HAL::HAL& hal;
@@ -250,7 +250,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                 uint8_t       *ct = out + MAVLINK_V2_HDR_LEN;
                 uint8_t tag[CHACHA_TAG_LEN];
 
-                Hacl_AEAD_Chacha20Poly1305_Simd128_encrypt(
+                Hacl_AEAD_Chacha20Poly1305_encrypt(
                     ct, tag,
                     (uint8_t*)pt, in_payload_len,
                     aad, aad_len,

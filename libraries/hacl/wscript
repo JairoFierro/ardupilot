@@ -19,8 +19,8 @@ def build(bld):
             'include/internal', 
         ],
         source=[
-            'src/Hacl_AEAD_Chacha20Poly1305_Simd128.c',
+            'src/Hacl_AEAD_Chacha20Poly1305.c',
             'src/Hacl_Chacha20.c', 
-            'src/Hacl_MAC_Poly1305_Simd128.c',
+            'src/Hacl_MAC_Poly1305.c',
         ]
     )

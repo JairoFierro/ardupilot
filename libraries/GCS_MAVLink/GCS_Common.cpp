@@ -83,7 +83,7 @@
 #define CHACHA_NONCE_LEN 12
 #define CHACHA_TAG_LEN   16
 #include <sys/random.h>
-#include "Hacl_AEAD_Chacha20Poly1305_Simd128.h"
+#include <hacl/include/Hacl_AEAD_Chacha20Poly1305.h>
 #include "GCS_Crypto.h"
 
 #include <stdio.h>
@@ -1991,7 +1991,7 @@ static bool chacha_decrypt_msg_payload_inplace(mavlink_message_t *msg)
     uint8_t *payload = _MAV_PAYLOAD_NON_CONST(msg);
     uint8_t *tag = payload + cipher_len;
 
-    uint32_t ok = Hacl_AEAD_Chacha20Poly1305_Simd128_decrypt(
+    uint32_t ok = Hacl_AEAD_Chacha20Poly1305_decrypt(
         /*output=*/payload,
         /*input=*/payload,
         /*input_len=*/(uint32_t)cipher_len,

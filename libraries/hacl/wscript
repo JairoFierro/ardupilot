@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# encoding: utf-8
+
+def build(bld):
+    bld.ap_stlib(
+        name='hacl',
+        ap_vehicle_project=False,
+        ap_libraries=[],
+        includes=[
+            'include',
+        ],
+        source=[
+            'src/Hacl_AEAD_Chacha20Poly1305_Simd128.c',
+            'src/Hacl_Chacha20.c',
+            'src/Hacl_MAC_Poly1305_Simd128.c',
+        ]
+    )

@@ -96,10 +96,10 @@ typedef FStar_UInt128_uint128 FStar_UInt128_t, uint128_t;
 #if !defined(KRML_VERIFIED_UINT128) && defined(IS_MSVC64)
 #include "fstar_uint128_msvc.h"
 #elif !defined(KRML_VERIFIED_UINT128) && defined(HAS_INT128)
-#include "fstar_uint128_gcc64.h"
+#include "minimal/fstar_uint128_gcc64.h"
 #else
-#include "FStar_UInt128_Verified.h"
-#include "fstar_uint128_struct_endianness.h"
+#include "minimal/FStar_UInt128_Verified.h"
+#include "minimal/fstar_uint128_struct_endianness.h"
 #endif
 
 #endif

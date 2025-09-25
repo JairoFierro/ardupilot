@@ -9,9 +9,4 @@ def build(bld):
             'hacl'  # Dependencia explícita de hacl
         ],
         use=['hacl'],  # Usar la librería hacl
-        includes=[
-            '../hacl/include',
-            '../hacl/include/krml', 
-            '../hacl/include/krml/internal',
-        ],
     )

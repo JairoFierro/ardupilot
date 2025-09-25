@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+# encoding: utf-8
+
+def build(bld):
+    bld.ap_stlib(
+        name='GCS_MAVLink',
+        ap_vehicle_project=False,
+        ap_libraries=[
+            'hacl'  # Dependencia explícita de hacl
+        ],
+        use=['hacl'],  # Usar la librería hacl
+        includes=[
+            '../hacl/include',
+            '../hacl/include/krml', 
+            '../hacl/include/krml/internal',
+        ],
+    )

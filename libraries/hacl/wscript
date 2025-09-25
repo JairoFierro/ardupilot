@@ -9,14 +9,16 @@ def build(bld):
         includes=[
             'include',
             'include/krml',
-            'include/krml/internal', 
+            'include/krml/internal',
             'include/internal',
+            'minimal',
         ],
         export_includes=[
             'include',
-            'include/krml',
+            'include/krml', 
             'include/krml/internal',
-            'include/internal', 
+            'include/internal',
+            'minimal',
         ],
         source=[
             'src/Hacl_AEAD_Chacha20Poly1305.c',

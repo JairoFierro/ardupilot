@@ -9,10 +9,10 @@
 
 #include <inttypes.h>
 #include <stdbool.h>
-#include "krml/internal/compat.h"
-#include "krml/lowstar_endianness.h"
-#include "krml/internal/types.h"
-#include "krml/internal/target.h"
+#include "../krml/internal/compat.h"
+#include "../krml/lowstar_endianness.h"
+#include "../krml/internal/types.h"
+#include "../krml/internal/target.h"
 
 extern krml_checked_int_t FStar_UInt64_n;
 

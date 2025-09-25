@@ -799,7 +799,6 @@ def _build_dynamic_sources(bld):
         )
 
     bld.recurse("libraries/AP_DDS")
-    bld.recurse('libraries/hacl')
 
     def write_version_header(tsk):
         bld = tsk.generator.bld

@@ -284,10 +284,11 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                         return;
                     }
                     // Si el cifrado falla, continuar con envío normal
-                }
-            }
-        }
-    }
+                }  // cierre de if (entry != nullptr)
+            }      // cierre de if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255)
+        }          // cierre de if (!signed_frame)
+    }              // cierre de if (len >= expected_len)
+    }              // cierre de if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX)
 
     // Fallback: enviar sin cifrar
     const size_t written = mavlink_comm_port[chan]->write(buf, len);

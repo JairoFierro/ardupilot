@@ -232,6 +232,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                    len, MAVLINK_V2_HDR_LEN + in_payload_len + 2);
             // Fallback: enviar sin cifrar
             const size_t written = mavlink_comm_port[chan]->write(buf, len);
+            (void)written; // Suprimir warning de variable no usada
             return;
         }
         

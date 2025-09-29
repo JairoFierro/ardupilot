@@ -208,6 +208,8 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
     }
 
     printf("Verificando condiciones de cifrado nuevo...\n");
+    printf("len=%u, MAVLINK_V2_HDR_LEN+2=%u, buf[0]=0x%02X, MAVLINK_V2_STX=0x%02X\n", 
+           len, MAVLINK_V2_HDR_LEN + 2, buf[0], MAVLINK_V2_STX);
 
     // Solo cifrar frames MAVLink v2 válidos
     if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
@@ -223,12 +225,17 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         const uint16_t plain_total_no_sig = (uint16_t)MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +CRC
         const bool     signed_frame       = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
 
+        printf("in_payload_len=%u, plain_total_no_sig=%u, len=%u, signed_frame=%s\n",
+               in_payload_len, plain_total_no_sig, len, signed_frame ? "true" : "false");
+
         // Solo cifrar frames no firmados con longitud exacta
         if (!signed_frame && len == plain_total_no_sig) {
             printf("Entró segundo...\n");
 
             // Verificar que el payload + tag cabe en el campo LEN
             if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
+                printf("Payload + tag size OK: %u + %u = %u <= 255\n", 
+                       in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
 
                 // Busca crc_extra del msgid
                 const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
@@ -289,10 +296,23 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                     } else {
                         // Error en el cifrado, enviar sin cifrar como fallback
                         // TODO: Agregar logging de error de seguridad
+                        printf("Error en cifrado ASCON: rc=%d, clen_out=%llu, expected=%u\n", 
+                               rc, clen_out, in_payload_len + CRYPTO_ABYTES);
                     }
+                } else {
+                    printf("No se encontró entrada para msgid=%u\n", msgid);
                 }
+            } else {
+                printf("Payload + tag demasiado grande: %u + %u = %u > 255\n", 
+                       in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
             }
+        } else {
+            printf("Frame firmado o longitud incorrecta: signed=%s, len=%u != expected=%u\n",
+                   signed_frame ? "true" : "false", len, plain_total_no_sig);
         }
+    } else {
+        printf("No es MAVLink v2 válido: len=%u < %u OR buf[0]=0x%02X != 0x%02X\n",
+               len, MAVLINK_V2_HDR_LEN + 2, buf[0], MAVLINK_V2_STX);
     }
 
     // Fallback: enviar sin cifrar

@@ -211,8 +211,8 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
     printf("len=%u, MAVLINK_V2_HDR_LEN+2=%u, buf[0]=0x%02X, MAVLINK_V2_STX=0x%02X\n", 
            len, MAVLINK_V2_HDR_LEN + 2, buf[0], MAVLINK_V2_STX);
 
-    // Solo cifrar frames MAVLink v2 válidos
-    if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
+    // Solo cifrar frames MAVLink v2 válidos (mínimo: header + checksum)
+    if (len >= MAVLINK_V2_HDR_LEN + 2 && buf[0] == MAVLINK_V2_STX) {
         printf("Entró primer...\n");
         const uint8_t  in_payload_len = buf[1];
         const uint8_t  incompat_flags = buf[2];
@@ -228,18 +228,18 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         printf("in_payload_len=%u, plain_total_no_sig=%u, len=%u, signed_frame=%s\n",
                in_payload_len, plain_total_no_sig, len, signed_frame ? "true" : "false");
 
-        // Solo cifrar frames no firmados con longitud exacta
-        if (!signed_frame && len == plain_total_no_sig) {
+        // Cifrar todos los frames no firmados (incluso con payload=0)
+        if (!signed_frame) {
             printf("Entró segundo...\n");
 
-            // Verificar que el payload + tag cabe en el campo LEN
+            // Verificar que el payload + tag cabe en el campo LEN (0-255)
             if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
                 printf("Payload + tag size OK: %u + %u = %u <= 255\n", 
                        in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
 
-                // Busca crc_extra del msgid
+                // Buscar crc_extra del msgid - siempre debería existir para MAVLink válido
                 const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
-                if (entry) {
+                if (entry != nullptr) {
                     printf("Entró tercer...\n");
                     const uint8_t crc_extra = entry->crc_extra;
 
@@ -307,8 +307,8 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                        in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
             }
         } else {
-            printf("Frame firmado o longitud incorrecta: signed=%s, len=%u != expected=%u\n",
-                   signed_frame ? "true" : "false", len, plain_total_no_sig);
+            printf("Frame firmado, no cifrar: signed=%s\n",
+                   signed_frame ? "true" : "false");
         }
     } else {
         printf("No es MAVLink v2 válido: len=%u < %u OR buf[0]=0x%02X != 0x%02X\n",

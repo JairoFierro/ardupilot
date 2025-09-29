@@ -207,7 +207,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         return;
     }
 
-    printf("Verificando condiciones de cifrado...\n");
+    printf("Verificando condiciones de cifrado nuevo...\n");
     
     if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
 

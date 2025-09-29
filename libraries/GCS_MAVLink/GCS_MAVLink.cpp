@@ -207,62 +207,29 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         return;
     }
 
-    printf("Verificando condiciones de cifrado nuevo...\n");
-    printf("len=%u, MAVLINK_V2_HDR_LEN+2=%u, buf[0]=0x%02X, MAVLINK_V2_STX=0x%02X\n", 
-           len, MAVLINK_V2_HDR_LEN + 2, buf[0], MAVLINK_V2_STX);
-
-    // TEMPORAL: Reducir umbral para testing - solo verificar que tenga al menos el STX
-    if (len >= 1 && buf[0] == MAVLINK_V2_STX) {
-        printf("Entró primer... len=%u\n", len);
-        
-        // Verificar que tenemos al menos el header completo
-        if (len < MAVLINK_V2_HDR_LEN) {
-            printf("Header incompleto: len=%u < MAVLINK_V2_HDR_LEN=%u\n", len, MAVLINK_V2_HDR_LEN);
-            // Fallback: enviar sin cifrar
-            const size_t written = mavlink_comm_port[chan]->write(buf, len);
-            (void)written; // Suprimir warning de variable no usada
-            return;
-        }
-        
+    // Cifrado ASCON para mensajes MAVLink v2
+    if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {
         const uint8_t  in_payload_len = buf[1];
-        printf("in_payload_len=%u\n", in_payload_len);
         
-        // Verificar que tenemos suficientes datos para un mensaje completo
-        if (len < MAVLINK_V2_HDR_LEN + in_payload_len + 2) {
-            printf("Mensaje incompleto: len=%u < required=%u\n", 
-                   len, MAVLINK_V2_HDR_LEN + in_payload_len + 2);
-            // Fallback: enviar sin cifrar
-            const size_t written = mavlink_comm_port[chan]->write(buf, len);
-            (void)written; // Suprimir warning de variable no usada
-            return;
-        }
-        
-        const uint8_t  incompat_flags = buf[2];
-        const uint8_t  compat_flags   = buf[3];
-        const uint8_t  seq            = buf[4];
-        const uint8_t  sysid          = buf[5];
-        const uint8_t  compid         = buf[6];
-        const uint32_t msgid          = (uint32_t)buf[7] | ((uint32_t)buf[8] << 8) | ((uint32_t)buf[9] << 16);
+        // Verificar que tenemos un mensaje completo
+        const uint16_t expected_len = MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +2 para CRC
+        if (len >= expected_len) {
+            const uint8_t  incompat_flags = buf[2];
+            const uint8_t  compat_flags   = buf[3];
+            const uint8_t  seq            = buf[4];
+            const uint8_t  sysid          = buf[5];
+            const uint8_t  compid         = buf[6];
+            const uint32_t msgid          = (uint32_t)buf[7] | ((uint32_t)buf[8] << 8) | ((uint32_t)buf[9] << 16);
 
-        const uint16_t plain_total_no_sig = (uint16_t)MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +CRC
-        const bool     signed_frame       = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
+            const bool signed_frame = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
 
-        printf("in_payload_len=%u, plain_total_no_sig=%u, len=%u, signed_frame=%s\n",
-               in_payload_len, plain_total_no_sig, len, signed_frame ? "true" : "false");
-
-        // Cifrar todos los frames no firmados (incluso con payload=0)
-        if (!signed_frame) {
-            printf("Entró segundo...\n");
-
-            // Verificar que el payload + tag cabe en el campo LEN (0-255)
-            if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
-                printf("Payload + tag size OK: %u + %u = %u <= 255\n", 
-                       in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
-
-                // Buscar crc_extra del msgid - siempre debería existir para MAVLink válido
-                const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
-                if (entry != nullptr) {
-                    printf("Entró tercer...\n");
+            // Cifrar solo frames no firmados
+            if (!signed_frame) {
+                // Verificar que el payload + tag cabe en el campo LEN (0-255)
+                if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
+                    // Buscar crc_extra del msgid
+                    const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
+                    if (entry != nullptr) {
                     const uint8_t crc_extra = entry->crc_extra;
 
                     // Buffer de salida: header + payload_cifrado + tag + CRC
@@ -315,35 +282,14 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                         }
 #endif
                         return;
-                    } else {
-                        // Error en el cifrado, enviar sin cifrar como fallback
-                        // TODO: Agregar logging de error de seguridad
-                        printf("Error en cifrado ASCON: rc=%d, clen_out=%llu, expected=%u\n", 
-                               rc, clen_out, in_payload_len + CRYPTO_ABYTES);
                     }
-                } else {
-                    printf("No se encontró entrada para msgid=%u\n", msgid);
+                    // Si el cifrado falla, continuar con envío normal
                 }
-            } else {
-                printf("Payload + tag demasiado grande: %u + %u = %u > 255\n", 
-                       in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
             }
-        } else {
-            printf("Frame firmado, no cifrar: signed=%s\n",
-                   signed_frame ? "true" : "false");
         }
-    } else {
-        printf("No es MAVLink v2 válido: len=%u < %u OR buf[0]=0x%02X != 0x%02X\n",
-               len, MAVLINK_V2_HDR_LEN + 2, buf[0], MAVLINK_V2_STX);
     }
 
     // Fallback: enviar sin cifrar
-    //}
-
-
-
-
-
     const size_t written = mavlink_comm_port[chan]->write(buf, len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {

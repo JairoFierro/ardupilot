@@ -208,10 +208,10 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
     }
 
     printf("Verificando condiciones de cifrado nuevo...\n");
-    
-    // if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
 
-        printf("Entró...\n");
+    // Solo cifrar frames MAVLink v2 válidos
+    if (len >= (MAVLINK_V2_HDR_LEN + 2) && buf[0] == MAVLINK_V2_STX) {
+        printf("Entró primer...\n");
         const uint8_t  in_payload_len = buf[1];
         const uint8_t  incompat_flags = buf[2];
         const uint8_t  compat_flags   = buf[3];
@@ -223,15 +223,17 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         const uint16_t plain_total_no_sig = (uint16_t)MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +CRC
         const bool     signed_frame       = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
 
-        // Frames con longitud exacta
+        // Solo cifrar frames no firmados con longitud exacta
         if (!signed_frame && len == plain_total_no_sig) {
+            printf("Entró segundo...\n");
 
-            // ¿Cabe el tag (+CRYPTO_ABYTES) en LEN (0..255)?
+            // Verificar que el payload + tag cabe en el campo LEN
             if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
 
-                // Busca crc_extra del msgid (helper de c_library_v2)
+                // Busca crc_extra del msgid
                 const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
                 if (entry) {
+                    printf("Entró tercer...\n");
                     const uint8_t crc_extra = entry->crc_extra;
 
                     // Buffer de salida: header + payload_cifrado + tag + CRC
@@ -262,6 +264,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                                                  /*npub=*/(const unsigned char*)npub,
                                                  /*k=*/(const unsigned char*)g_ascon_ctx.key);
                     if (rc == 0 && clen_out == (unsigned long long)(in_payload_len + CRYPTO_ABYTES)) {
+                        // Cifrado exitoso
                         // Recalcular CRC sobre NUEVO payload (ciphertext) + crc_extra
                         uint16_t crc;
                         crc_init(&crc);
@@ -283,11 +286,16 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
                         }
 #endif
                         return;
+                    } else {
+                        // Error en el cifrado, enviar sin cifrar como fallback
+                        // TODO: Agregar logging de error de seguridad
                     }
-                    
                 }
             }
         }
+    }
+
+    // Fallback: enviar sin cifrar
     //}
 
 

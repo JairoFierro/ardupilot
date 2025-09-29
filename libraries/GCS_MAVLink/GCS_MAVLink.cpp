@@ -220,6 +220,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
             printf("Header incompleto: len=%u < MAVLINK_V2_HDR_LEN=%u\n", len, MAVLINK_V2_HDR_LEN);
             // Fallback: enviar sin cifrar
             const size_t written = mavlink_comm_port[chan]->write(buf, len);
+            (void)written; // Suprimir warning de variable no usada
             return;
         }
         

@@ -213,7 +213,18 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 
     // TEMPORAL: Reducir umbral para testing - solo verificar que tenga al menos el STX
     if (len >= 1 && buf[0] == MAVLINK_V2_STX) {
-        printf("Entró primer... len=%u, in_payload_len=%u\n", len, in_payload_len);
+        printf("Entró primer... len=%u\n", len);
+        
+        // Verificar que tenemos al menos el header completo
+        if (len < MAVLINK_V2_HDR_LEN) {
+            printf("Header incompleto: len=%u < MAVLINK_V2_HDR_LEN=%u\n", len, MAVLINK_V2_HDR_LEN);
+            // Fallback: enviar sin cifrar
+            const size_t written = mavlink_comm_port[chan]->write(buf, len);
+            return;
+        }
+        
+        const uint8_t  in_payload_len = buf[1];
+        printf("in_payload_len=%u\n", in_payload_len);
         
         // Verificar que tenemos suficientes datos para un mensaje completo
         if (len < MAVLINK_V2_HDR_LEN + in_payload_len + 2) {
@@ -223,7 +234,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
             const size_t written = mavlink_comm_port[chan]->write(buf, len);
             return;
         }
-        const uint8_t  in_payload_len = buf[1];
+        
         const uint8_t  incompat_flags = buf[2];
         const uint8_t  compat_flags   = buf[3];
         const uint8_t  seq            = buf[4];

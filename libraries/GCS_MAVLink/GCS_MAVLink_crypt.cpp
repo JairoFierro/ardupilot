@@ -49,6 +49,8 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
         return false;
     }
 
+    printf("[DESCIFRADO] Iniciando descifrado - msgid=%u, len=%u\n", msg->msgid, msg->len);
+
     // (opcional) filtra por msg->msgid si NO cifras todo
     // if (!should_decrypt(msg->msgid)) return true;
 
@@ -83,11 +85,13 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
 
     if (rc != 0) {
         // autenticidad falló
+        printf("[DESCIFRADO] ERROR: Descifrado falló - rc=%d\n", rc);
         return false;
     }
 
     // Ajusta longitud al claro (quita el tag)
     msg->len = (uint8_t)mlen;
+    printf("[DESCIFRADO] ¡Descifrado exitoso! Nueva longitud: %u\n", msg->len);
     return true;
 }
 

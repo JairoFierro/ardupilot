@@ -2,6 +2,7 @@
 #include "GCS_MAVLink_crypt.h"
 #include "ascon_ctx.h"
 #include <string.h>
+#include <stdio.h>
 
 #ifdef AP_MAVLINK_ENCRYPT
 

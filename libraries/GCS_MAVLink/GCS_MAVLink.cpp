@@ -91,11 +91,11 @@ static bool chan_discard[MAVLINK_COMM_NUM_BUFFERS];
 
 // Buffer de acumulación para manejar fragmentación de mensajes MAVLink
 struct mavlink_fragment_buffer_t {
-    uint8_t buffer[300];        // Buffer para acumular el mensaje completo
-    uint8_t accumulated_len;    // Bytes acumulados hasta ahora
-    uint8_t expected_len;       // Longitud total esperada del mensaje
-    bool    is_accumulating;    // Si estamos en proceso de acumulación
-    uint32_t last_fragment_ms;  // Timestamp del último fragmento (para timeout)
+    uint8_t buffer[300];         // Buffer para acumular el mensaje completo
+    uint16_t accumulated_len;    // Bytes acumulados hasta ahora
+    uint16_t expected_len;       // Longitud total esperada del mensaje
+    bool    is_accumulating;     // Si estamos en proceso de acumulación
+    uint32_t last_fragment_ms;   // Timestamp del último fragmento (para timeout)
 };
 
 static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
@@ -251,16 +251,11 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         frag_buf->expected_len = expected_total;
         frag_buf->last_fragment_ms = now_ms;
         
-        // Copiar este primer fragmento
-        if (len <= sizeof(frag_buf->buffer)) {
-            memcpy(frag_buf->buffer, buf, len);
-            frag_buf->accumulated_len = len;
-            printf("[FRAGMENTACION] Primer fragmento acumulado: %u/%u bytes\n", 
-                   frag_buf->accumulated_len, frag_buf->expected_len);
-        } else {
-            printf("[FRAGMENTACION] ERROR: Fragmento demasiado grande\n");
-            frag_buf->is_accumulating = false;
-        }
+        // Copiar este primer fragmento (len como uint8_t siempre cabe en buffer[300])
+        memcpy(frag_buf->buffer, buf, len);
+        frag_buf->accumulated_len = len;
+        printf("[FRAGMENTACION] Primer fragmento acumulado: %u/%u bytes\n", 
+               frag_buf->accumulated_len, frag_buf->expected_len);
         return;
     }
     
@@ -268,7 +263,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
     if (frag_buf->is_accumulating) {
         printf("[FRAGMENTACION] Fragmento adicional recibido: len=%u\n", len);
         
-        // Verificar que cabe en el buffer
+        // Verificar que cabe en el buffer y no excede el mensaje esperado
         if (frag_buf->accumulated_len + len <= sizeof(frag_buf->buffer) && 
             frag_buf->accumulated_len + len <= frag_buf->expected_len) {
             

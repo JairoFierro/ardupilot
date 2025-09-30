@@ -89,6 +89,17 @@ bool gcs_alternative_active[MAVLINK_COMM_NUM_BUFFERS];
 static HAL_Semaphore chan_locks[MAVLINK_COMM_NUM_BUFFERS];
 static bool chan_discard[MAVLINK_COMM_NUM_BUFFERS];
 
+// Buffer de acumulación para manejar fragmentación de mensajes MAVLink
+struct mavlink_fragment_buffer_t {
+    uint8_t buffer[300];        // Buffer para acumular el mensaje completo
+    uint8_t accumulated_len;    // Bytes acumulados hasta ahora
+    uint8_t expected_len;       // Longitud total esperada del mensaje
+    bool    is_accumulating;    // Si estamos en proceso de acumulación
+    uint32_t last_fragment_ms;  // Timestamp del último fragmento (para timeout)
+};
+
+static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
+
 mavlink_system_t mavlink_system = {7,1};
 
 // routing table
@@ -207,6 +218,103 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         return;
     }
 
+    // Obtener buffer de fragmentación para este canal
+    mavlink_fragment_buffer_t *frag_buf = &fragment_buffers[chan];
+    const uint32_t now_ms = AP_HAL::millis();
+    
+    // Timeout para limpiar buffer incompleto (1 segundo)
+    if (frag_buf->is_accumulating && (now_ms - frag_buf->last_fragment_ms) > 1000) {
+        printf("[FRAGMENTACION] Timeout - reseteando buffer del canal %d\n", chan);
+        frag_buf->is_accumulating = false;
+        frag_buf->accumulated_len = 0;
+    }
+
+    // Detectar inicio de mensaje MAVLink v2
+    if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {
+        const uint8_t payload_len = buf[1];
+        const uint16_t expected_total = MAVLINK_V2_HDR_LEN + payload_len + 2; // +2 para CRC
+        
+        printf("[FRAGMENTACION] Detectado inicio MAVLink v2: len=%u, payload_len=%u, expected_total=%u\n", 
+               len, payload_len, expected_total);
+        
+        // Si el mensaje está completo en este buffer, procesarlo directamente
+        if (len >= expected_total) {
+            printf("[FRAGMENTACION] Mensaje completo en un solo fragmento\n");
+            send_complete_mavlink_message(chan, buf, len);
+            return;
+        }
+        
+        // El mensaje está fragmentado - iniciar acumulación
+        printf("[FRAGMENTACION] Mensaje fragmentado - iniciando acumulación\n");
+        frag_buf->is_accumulating = true;
+        frag_buf->accumulated_len = 0;
+        frag_buf->expected_len = expected_total;
+        frag_buf->last_fragment_ms = now_ms;
+        
+        // Copiar este primer fragmento
+        if (len <= sizeof(frag_buf->buffer)) {
+            memcpy(frag_buf->buffer, buf, len);
+            frag_buf->accumulated_len = len;
+            printf("[FRAGMENTACION] Primer fragmento acumulado: %u/%u bytes\n", 
+                   frag_buf->accumulated_len, frag_buf->expected_len);
+        } else {
+            printf("[FRAGMENTACION] ERROR: Fragmento demasiado grande\n");
+            frag_buf->is_accumulating = false;
+        }
+        return;
+    }
+    
+    // Si estamos acumulando y este no es un inicio de MAVLink v2
+    if (frag_buf->is_accumulating) {
+        printf("[FRAGMENTACION] Fragmento adicional recibido: len=%u\n", len);
+        
+        // Verificar que cabe en el buffer
+        if (frag_buf->accumulated_len + len <= sizeof(frag_buf->buffer) && 
+            frag_buf->accumulated_len + len <= frag_buf->expected_len) {
+            
+            // Agregar este fragmento al buffer acumulado
+            memcpy(frag_buf->buffer + frag_buf->accumulated_len, buf, len);
+            frag_buf->accumulated_len += len;
+            frag_buf->last_fragment_ms = now_ms;
+            
+            printf("[FRAGMENTACION] Fragmento acumulado: %u/%u bytes\n", 
+                   frag_buf->accumulated_len, frag_buf->expected_len);
+            
+            // ¿Tenemos el mensaje completo?
+            if (frag_buf->accumulated_len >= frag_buf->expected_len) {
+                printf("[FRAGMENTACION] ¡Mensaje completo reconstruido!\n");
+                
+                // Procesar mensaje completo
+                send_complete_mavlink_message(chan, frag_buf->buffer, frag_buf->accumulated_len);
+                
+                // Resetear buffer
+                frag_buf->is_accumulating = false;
+                frag_buf->accumulated_len = 0;
+            }
+            return;
+        } else {
+            printf("[FRAGMENTACION] ERROR: Fragmento excede límites esperados\n");
+            frag_buf->is_accumulating = false;
+        }
+    }
+
+    // Fallback: enviar sin cifrar (para mensajes no MAVLink v2 o errores)
+    printf("[FRAGMENTACION] Enviando mensaje sin procesar (%u bytes)\n", len);
+    const size_t written = mavlink_comm_port[chan]->write(buf, len);
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
+        AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
+    }
+#else
+    (void)written;
+#endif
+}
+
+/*
+  Procesar y enviar un mensaje MAVLink completo (con cifrado si aplica)
+ */
+void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
+{
     // Cifrado ASCON para mensajes MAVLink v2
     if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {
         const uint8_t  in_payload_len = buf[1];

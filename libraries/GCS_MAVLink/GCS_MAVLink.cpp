@@ -357,6 +357,7 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                         
                         // Buffer de salida: header + payload_cifrado + tag + CRC
                         uint8_t out[300];
+                        
                         memcpy(out, buf, MAVLINK_V2_HDR_LEN);  // copia header
                         out[1] = in_payload_len + CRYPTO_ABYTES; // nuevo LEN
 

@@ -365,8 +365,28 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                         uint8_t aad[16];
                         const size_t aad_len = build_aad(aad, incompat_flags, compat_flags, seq, sysid, compid, msgid);
 
+                        printf("[CIFRADO] sysid=%u, compid=%u, seq=%u\n", sysid, compid, seq);
+                        printf("[CIFRADO] incompat_flags=0x%02X, compat_flags=0x%02X\n", incompat_flags, compat_flags);
+                        printf("[CIFRADO] AAD (%zu bytes): ", aad_len);
+                        for(size_t i = 0; i < aad_len && i < 16; i++) {
+                            printf("%02X ", aad[i]);
+                        }
+                        printf("\n");
+
                         uint8_t npub[CRYPTO_NPUBBYTES];
                         build_nonce(npub, g_ascon_ctx.iv_boot, sysid, compid, seq);
+
+                        printf("[CIFRADO] Nonce (16 bytes): ");
+                        for(int i = 0; i < CRYPTO_NPUBBYTES; i++) {
+                            printf("%02X ", npub[i]);
+                        }
+                        printf("\n");
+
+                        printf("[CIFRADO] Clave (16 bytes): ");
+                        for(int i = 0; i < 16; i++) {
+                            printf("%02X ", g_ascon_ctx.key[i]);
+                        }
+                        printf("\n");
 
                         // Punteros a payload
                         const uint8_t *m_in  = buf + MAVLINK_V2_HDR_LEN;     // plaintext (input)

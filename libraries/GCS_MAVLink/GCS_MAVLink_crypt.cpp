@@ -51,6 +51,8 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
     }
 
     printf("[DESCIFRADO] Iniciando descifrado - msgid=%u, len=%u\n", msg->msgid, msg->len);
+    printf("[DESCIFRADO] sysid=%u, compid=%u, seq=%u\n", msg->sysid, msg->compid, msg->seq);
+    printf("[DESCIFRADO] incompat_flags=0x%02X, compat_flags=0x%02X\n", msg->incompat_flags, msg->compat_flags);
 
     // (opcional) filtra por msg->msgid si NO cifras todo
     // if (!should_decrypt(msg->msgid)) return true;
@@ -67,12 +69,37 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
         msg->msgid
     );
 
+    printf("[DESCIFRADO] AAD (%zu bytes): ", aad_len);
+    for(size_t i = 0; i < aad_len && i < 16; i++) {
+        printf("%02X ", aad[i]);
+    }
+    printf("\n");
+
     uint8_t npub[CRYPTO_NPUBBYTES];
     ascon_build_nonce(npub, g_ascon_ctx.iv_boot, msg->sysid, msg->compid, msg->seq);
+
+    printf("[DESCIFRADO] Nonce (16 bytes): ");
+    for(int i = 0; i < CRYPTO_NPUBBYTES; i++) {
+        printf("%02X ", npub[i]);
+    }
+    printf("\n");
+
+    printf("[DESCIFRADO] Clave (16 bytes): ");
+    for(int i = 0; i < 16; i++) {
+        printf("%02X ", g_ascon_ctx.key[i]);
+    }
+    printf("\n");
 
     // Punteros a payload
     uint8_t* c_in  = (uint8_t*)_MAV_PAYLOAD(msg);               // ciphertext || tag
     uint8_t* m_out = (uint8_t*)_MAV_PAYLOAD_NON_CONST(msg);     // plaintext out (mismo buffer)
+
+    printf("[DESCIFRADO] Payload cifrado (%u bytes): ", msg->len);
+    for(int i = 0; i < msg->len && i < 32; i++) {
+        printf("%02X ", c_in[i]);
+    }
+    if(msg->len > 32) printf("...");
+    printf("\n");
 
     unsigned long long mlen = 0ULL;
     const int rc = crypto_aead_decrypt(
@@ -87,12 +114,23 @@ bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg)
     if (rc != 0) {
         // autenticidad falló
         printf("[DESCIFRADO] ERROR: Descifrado falló - rc=%d\n", rc);
+        printf("[DESCIFRADO] Posibles causas:\n");
+        printf("[DESCIFRADO]   - Clave incorrecta\n");
+        printf("[DESCIFRADO]   - Nonce diferente\n");
+        printf("[DESCIFRADO]   - AAD diferente\n");
+        printf("[DESCIFRADO]   - Datos corruptos\n");
         return false;
     }
 
     // Ajusta longitud al claro (quita el tag)
     msg->len = (uint8_t)mlen;
     printf("[DESCIFRADO] ¡Descifrado exitoso! Nueva longitud: %u\n", msg->len);
+    printf("[DESCIFRADO] Payload descifrado (%u bytes): ", msg->len);
+    for(int i = 0; i < msg->len && i < 16; i++) {
+        printf("%02X ", m_out[i]);
+    }
+    if(msg->len > 16) printf("...");
+    printf("\n");
     return true;
 }
 

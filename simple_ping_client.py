@@ -22,9 +22,9 @@ def crc16_ccitt(data):
 def main():
     print("=== Cliente PING - Prueba Simple ===")
     
-    # Conectar al canal cifrado (puerto 14552)
+    # Conectar al canal principal (puerto 14550) donde van los mensajes cifrados
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_address = ('127.0.0.1', 14552)
+    server_address = ('127.0.0.1', 14550)  # Cambiar a 14550
     
     print(f"Conectando a {server_address}")
     

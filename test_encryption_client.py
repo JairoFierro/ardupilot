@@ -8,6 +8,19 @@ import socket
 import time
 import struct
 
+def crc16_ccitt(data):
+    """Calcular CRC16-CCITT para MAVLink"""
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = (crc << 1) ^ 0x1021
+            else:
+                crc = crc << 1
+            crc &= 0xFFFF
+    return crc
+
 def main():
     print("=== Cliente de Prueba - Canal Cifrado ASCON ===")
     
@@ -22,6 +35,12 @@ def main():
         try:
             # Enviar REQUEST_MESSAGE para HEARTBEAT (msgid=0)
             # MAVLink v2: STX, LEN, INCOMPAT, COMPAT, SEQ, SYSID, COMPID, MSGID(3 bytes), PAYLOAD, CRC
+            payload = bytearray([
+                0x00,  # HEARTBEAT msgid LO
+                0x00,  # HEARTBEAT msgid MID  
+                0x00,  # HEARTBEAT msgid HI
+            ])
+            
             request_msg = bytearray([
                 0xFD,  # STX (MAVLink v2)
                 0x03,  # LEN (3 bytes payload)
@@ -33,14 +52,21 @@ def main():
                 0x28,  # MSGID LO (REQUEST_MESSAGE = 512 = 0x0200)
                 0x02,  # MSGID MID
                 0x00,  # MSGID HI
-                # PAYLOAD (3 bytes):
-                0x00,  # HEARTBEAT msgid LO
-                0x00,  # HEARTBEAT msgid MID  
-                0x00,  # HEARTBEAT msgid HI
             ])
             
-            # Calcular CRC (simplificado para prueba)
-            request_msg.extend([0x00, 0x00])  # CRC placeholder
+            # Agregar payload
+            request_msg.extend(payload)
+            
+            # Calcular CRC correcto
+            crc_data = request_msg[1:]  # Todo excepto STX
+            crc_data.append(0x59)  # CRC_EXTRA para REQUEST_MESSAGE
+            crc = crc16_ccitt(crc_data)
+            
+            # Agregar CRC (little endian)
+            request_msg.append(crc & 0xFF)
+            request_msg.append((crc >> 8) & 0xFF)
+            
+            print(f"Mensaje completo: {' '.join([f'{b:02X}' for b in request_msg])}")
             
             print(f"\n[{time.strftime('%H:%M:%S')}] Enviando REQUEST_MESSAGE para HEARTBEAT...")
             sock.sendto(request_msg, server_address)

@@ -81,6 +81,11 @@ uint16_t comm_get_txspace(mavlink_channel_t chan);
 #include "include/mavlink/v2.0/all/mavlink.h"
 #pragma GCC diagnostic pop
 
+// bit libre en compat_flags para marcar cifrado
+#ifndef MAVLINK_CFLAG_ENCRYPTED
+#define MAVLINK_CFLAG_ENCRYPTED 0x80  // usa 0x80 en compat_flags para cifrado ASCON
+#endif
+
 #ifdef AP_MAVLINK_ENCRYPT
 bool ascon_encrypt_msg_payload_inplace(mavlink_message_t* msg);
 bool ascon_decrypt_msg_payload_inplace(mavlink_message_t* msg);

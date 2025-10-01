@@ -165,7 +165,7 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
 #define MAVLINK_V2_HDR_LEN   10
 #define MAVLINK_V2_SIG_LEN   13
 #define MAVLINK_IFLAG_SIGNED 0x01
-#define MAVLINK_IFLAG_ENCRYPTED 0x02  // Flag para mensajes cifrados con ASCON
+// MAVLINK_CFLAG_ENCRYPTED 0x80 ahora definido en GCS_MAVLink.h
 
 //Construir el nonce para ASCON:
 // A 128-bit value is used only once, ensuring
@@ -405,8 +405,9 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                         
                         memcpy(out, buf, MAVLINK_V2_HDR_LEN);  // copia header
                         out[1] = in_payload_len + CRYPTO_ABYTES; // nuevo LEN
-                        out[2] |= MAVLINK_IFLAG_ENCRYPTED; // marcar como cifrado
-                        printf("[CIFRADO] Marcando mensaje como cifrado (incompat_flags=0x%02X)\n", out[2]);
+                        out[2] = (out[2] | MAVLINK_IFLAG_SIGNED) & 0xFF;   // mantener otros bits válidos, asegurar SIGNED
+                        out[3] = out[3] | MAVLINK_CFLAG_ENCRYPTED;        // marcar "encrypted" en compat_flags
+                        printf("[CIFRADO] Marcando mensaje como cifrado (compat_flags=0x%02X)\n", out[3]);
                         
                         // DEBUG: Verificar que el flag se mantenga
                         printf("[CIFRADO] Header final: ");
@@ -417,10 +418,10 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
 
                         // AAD + Nonce
                         uint8_t aad[16];
-                        const size_t aad_len = build_aad(aad, out[2], compat_flags, seq, sysid, compid, msgid);
+                        const size_t aad_len = build_aad(aad, out[2], out[3], seq, sysid, compid, msgid);
 
                         printf("[CIFRADO] sysid=%u, compid=%u, seq=%u\n", sysid, compid, seq);
-                        printf("[CIFRADO] incompat_flags=0x%02X (actualizado), compat_flags=0x%02X\n", out[2], compat_flags);
+                        printf("[CIFRADO] incompat_flags=0x%02X, compat_flags=0x%02X (cifrado marcado)\n", out[2], out[3]);
                         printf("[CIFRADO] AAD (%zu bytes): ", aad_len);
                         for(size_t i = 0; i < aad_len && i < 16; i++) {
                             printf("%02X ", aad[i]);
@@ -502,8 +503,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                                 printf("%02X ", out[i]);
                             }
                             printf("\n");
-                            printf("[CIFRADO] Flag INCOMPAT en posición 2: 0x%02X (¿cifrado? %s)\n", 
-                                   out[2], (out[2] & 0x02) ? "SÍ" : "NO");
+                            printf("[CIFRADO] Flag COMPAT en posición 3: 0x%02X (¿cifrado? %s)\n", 
+                                   out[3], (out[3] & MAVLINK_CFLAG_ENCRYPTED) ? "SÍ" : "NO");
                             
                             // **DOBLE ENVÍO**: 
                             // 1. Enviar mensaje ORIGINAL sin cifrar al canal actual (MAVProxy)

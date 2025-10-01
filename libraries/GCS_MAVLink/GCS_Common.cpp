@@ -19,8 +19,7 @@
 
 #define AP_MAVLINK_ENCRYPT 1
 
-// Flag para mensajes cifrados con ASCON
-#define MAVLINK_IFLAG_ENCRYPTED 0x02
+// MAVLINK_CFLAG_ENCRYPTED 0x80 ahora definido en GCS_MAVLink.h
 
 #if HAL_GCS_ENABLED
 
@@ -1978,14 +1977,15 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
              // descifrado
                 if (msg.magic == 0xFD) {  // MAVLink v2
                     // DEBUG: Mostrar todos los mensajes MAVLink v2
-                    printf("[DEBUG] MAVLink v2 recibido: msgid=%u, sysid=%u, compid=%u, incompat_flags=0x%02X\n", 
-                           msg.msgid, msg.sysid, msg.compid, msg.incompat_flags);
+                    printf("[DEBUG] MAVLink v2 recibido: msgid=%u, sysid=%u, compid=%u, incompat_flags=0x%02X, compat_flags=0x%02X\n", 
+                           msg.msgid, msg.sysid, msg.compid, msg.incompat_flags, msg.compat_flags);
                     
-                    // Solo descifrar si el mensaje está marcado como cifrado
-                    if (msg.incompat_flags & MAVLINK_IFLAG_ENCRYPTED) {
+                    // Solo descifrar si el mensaje está marcado como cifrado en compat_flags
+                    const bool is_encrypted = (msg.compat_flags & MAVLINK_CFLAG_ENCRYPTED) != 0;
+                    if (is_encrypted) {
                         printf("[DESCIFRADO] Mensaje marcado como cifrado - msgid=%u, sysid=%u, compid=%u\n", 
                                msg.msgid, msg.sysid, msg.compid);
-                        printf("[DESCIFRADO] incompat_flags=0x%02X\n", msg.incompat_flags);
+                        printf("[DESCIFRADO] compat_flags=0x%02X\n", msg.compat_flags);
                         
                         if (!ascon_decrypt_msg_payload_inplace(&msg)) {
                             printf("[DESCIFRADO] ERROR: Falló el descifrado, descartando mensaje\n");

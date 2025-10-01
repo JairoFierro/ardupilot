@@ -322,10 +322,15 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
     static uint32_t msg_count = 0;
     msg_count++;
     
-    // Cada 5 mensajes, cifrar pero ENVIAR AL CANAL ORIGINAL para que llegue al cliente
+    // DEBUG: Mostrar contador cada 10 mensajes
+    if ((msg_count % 10) == 0) {
+        printf("[CIFRADO] Contador: %u mensajes procesados\n", msg_count);
+    }
+    
+    // Cada 3 mensajes, cifrar para hacer pruebas más frecuentes
     mavlink_channel_t test_chan = chan;
     bool force_encrypt = false;
-    if ((msg_count % 5) == 0 && chan == MAVLINK_COMM_0) {
+    if ((msg_count % 3) == 0 && chan == MAVLINK_COMM_0) {
         test_chan = MAVLINK_COMM_1;  // Lógica de cifrado
         force_encrypt = true;
         printf("[CIFRADO] **FORZANDO** Cifrado para prueba (msg #%u) - Enviará por Canal %u\n", msg_count, (unsigned)chan);

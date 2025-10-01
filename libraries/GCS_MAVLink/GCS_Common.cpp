@@ -1974,6 +1974,7 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
                     if (msg.incompat_flags & MAVLINK_IFLAG_ENCRYPTED) {
                         printf("[DESCIFRADO] Mensaje marcado como cifrado - msgid=%u, sysid=%u, compid=%u\n", 
                                msg.msgid, msg.sysid, msg.compid);
+                        printf("[DESCIFRADO] incompat_flags=0x%02X\n", msg.incompat_flags);
                         
                         if (!ascon_decrypt_msg_payload_inplace(&msg)) {
                             printf("[DESCIFRADO] ERROR: Falló el descifrado, descartando mensaje\n");
@@ -1983,11 +1984,15 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
                             hal.util->persistent_data.last_mavlink_msgid = 0;
                             continue;
                         } else {
-                            printf("[DESCIFRADO] ¡Descifrado exitoso!\n");
+                            printf("[DESCIFRADO] ¡Descifrado exitoso! Payload descifrado disponible\n");
+                            // Mensaje descifrado correctamente, continuar procesamiento normal
                         }
                     } else {
-                        printf("[DESCIFRADO] Mensaje no cifrado, procesando normalmente - msgid=%u, sysid=%u, compid=%u\n", 
-                               msg.msgid, msg.sysid, msg.compid);
+                        // Solo mostrar debug para mensajes no nuestros para reducir spam
+                        if (msg.sysid != 1) {
+                            printf("[DESCIFRADO] Mensaje no cifrado (externo) - msgid=%u, sysid=%u, compid=%u\n", 
+                                   msg.msgid, msg.sysid, msg.compid);
+                        }
                     }
                 }
             // descifrado

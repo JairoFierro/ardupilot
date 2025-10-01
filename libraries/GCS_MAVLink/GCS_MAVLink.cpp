@@ -204,7 +204,11 @@ static inline size_t build_aad(uint8_t *aad,
  */
 void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 {
+    // **DEBUG**: Interceptar todos los envíos para ver qué pasa
+    printf("[DEBUG] comm_send_buffer: Canal=%u, len=%u\n", (unsigned)chan, len);
+    
     if (!valid_channel(chan) || mavlink_comm_port[chan] == nullptr || chan_discard[chan]) {
+        printf("[DEBUG] Canal inválido o descartado\n");
         return;
     }
 #if HAL_HIGH_LATENCY2_ENABLED
@@ -314,10 +318,21 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
     // DEBUG: Mostrar información del canal
     printf("[CIFRADO] Canal=%u, len=%u\n", (unsigned)chan, len);
     
-    // NO CIFRAR mensajes del canal 0 (MAVProxy/Console) para mantener compatibilidad
-    if (chan == MAVLINK_COMM_0) {
+    // **TEMPORAL**: Forzar algunos mensajes a Canal 1 para probar cifrado
+    static uint32_t msg_count = 0;
+    msg_count++;
+    
+    // Cada 5 mensajes, simular que van por Canal 1
+    mavlink_channel_t test_chan = chan;
+    if ((msg_count % 5) == 0 && chan == MAVLINK_COMM_0) {
+        test_chan = MAVLINK_COMM_1;
+        printf("[CIFRADO] **FORZANDO** Canal 1 para prueba (msg #%u)\n", msg_count);
+    }
+    
+    // NO CIFRAR mensajes del canal 0 - usar test_chan para la lógica
+    if (test_chan == MAVLINK_COMM_0) {
         printf("[CIFRADO] SKIP: Canal 0 (MAVProxy), enviando sin cifrar\n");
-        const size_t written = mavlink_comm_port[chan]->write(buf, len);
+        const size_t written = mavlink_comm_port[chan]->write(buf, len);  // Usar chan original para el envío real
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
             AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
@@ -325,6 +340,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
 #endif
         return;
     }
+    
+    printf("[CIFRADO] CIFRANDO Canal %u\n", (unsigned)test_chan);
     
     // Cifrado ASCON para mensajes MAVLink v2 (solo canales != 0)
     if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {

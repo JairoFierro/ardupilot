@@ -322,15 +322,17 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
     static uint32_t msg_count = 0;
     msg_count++;
     
-    // Cada 5 mensajes, simular que van por Canal 1
+    // Cada 5 mensajes, cifrar pero ENVIAR AL CANAL ORIGINAL para que llegue al cliente
     mavlink_channel_t test_chan = chan;
+    bool force_encrypt = false;
     if ((msg_count % 5) == 0 && chan == MAVLINK_COMM_0) {
-        test_chan = MAVLINK_COMM_1;
-        printf("[CIFRADO] **FORZANDO** Canal 1 para prueba (msg #%u)\n", msg_count);
+        test_chan = MAVLINK_COMM_1;  // Lógica de cifrado
+        force_encrypt = true;
+        printf("[CIFRADO] **FORZANDO** Cifrado para prueba (msg #%u) - Enviará por Canal %u\n", msg_count, (unsigned)chan);
     }
     
     // NO CIFRAR mensajes del canal 0 - usar test_chan para la lógica
-    if (test_chan == MAVLINK_COMM_0) {
+    if (test_chan == MAVLINK_COMM_0 && !force_encrypt) {
         printf("[CIFRADO] SKIP: Canal 0 (MAVProxy), enviando sin cifrar\n");
         const size_t written = mavlink_comm_port[chan]->write(buf, len);  // Usar chan original para el envío real
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -474,14 +476,22 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                                    out_len, payload_end);
 
                             // Enviar frame cifrado
-                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes\n", out_len);
+                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes al CANAL %u\n", out_len, (unsigned)chan);
+                            printf("[CIFRADO] Puerto destino: mavlink_comm_port[%u]\n", (unsigned)chan);
                             const size_t written = mavlink_comm_port[chan]->write(out, out_len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
                             if (written < out_len && !mavlink_comm_port[chan]->is_write_locked()) {
                                 AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, out_len);
                             }
 #endif
-                            printf("[CIFRADO] ¡Mensaje cifrado enviado exitosamente!\n");
+                            printf("[CIFRADO] ¡Mensaje cifrado enviado exitosamente! Written=%zu bytes\n", written);
+                            
+                            // DEBUG: Mostrar primeros bytes del mensaje enviado
+                            printf("[CIFRADO] Mensaje enviado (primeros 20 bytes): ");
+                            for(int i = 0; i < 20 && i < out_len; i++) {
+                                printf("%02X ", out[i]);
+                            }
+                            printf("\n");
                             return;
                         } else {
                             printf("[CIFRADO] ERROR: Cifrado falló - rc=%d, clen_out=%llu\n", rc, clen_out);

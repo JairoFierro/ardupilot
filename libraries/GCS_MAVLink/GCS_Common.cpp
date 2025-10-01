@@ -19,6 +19,9 @@
 
 #define AP_MAVLINK_ENCRYPT 1
 
+// Flag para mensajes cifrados con ASCON
+#define MAVLINK_IFLAG_ENCRYPTED 0x02
+
 #if HAL_GCS_ENABLED
 
 #include "GCS.h"
@@ -1967,18 +1970,26 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
             
              // descifrado
                 if (msg.magic == 0xFD) {  // MAVLink v2
-                
-                if (!ascon_decrypt_msg_payload_inplace(&msg)) {
-                    
-                    parsed_packet = true;
-                    gcs_alternative_active[chan] = false;
-                    alternative.last_mavlink_ms = now_ms;
-                    hal.util->persistent_data.last_mavlink_msgid = 0;
-                
-                    continue;
+                    // Solo descifrar si el mensaje está marcado como cifrado
+                    if (msg.incompat_flags & MAVLINK_IFLAG_ENCRYPTED) {
+                        printf("[DESCIFRADO] Mensaje marcado como cifrado - msgid=%u, sysid=%u, compid=%u\n", 
+                               msg.msgid, msg.sysid, msg.compid);
+                        
+                        if (!ascon_decrypt_msg_payload_inplace(&msg)) {
+                            printf("[DESCIFRADO] ERROR: Falló el descifrado, descartando mensaje\n");
+                            parsed_packet = true;
+                            gcs_alternative_active[chan] = false;
+                            alternative.last_mavlink_ms = now_ms;
+                            hal.util->persistent_data.last_mavlink_msgid = 0;
+                            continue;
+                        } else {
+                            printf("[DESCIFRADO] ¡Descifrado exitoso!\n");
+                        }
+                    } else {
+                        printf("[DESCIFRADO] Mensaje no cifrado, procesando normalmente - msgid=%u, sysid=%u, compid=%u\n", 
+                               msg.msgid, msg.sysid, msg.compid);
+                    }
                 }
-                
-            }
             // descifrado
 
             packetReceived(status, msg);

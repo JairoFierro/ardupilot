@@ -160,6 +160,7 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
 #define MAVLINK_V2_HDR_LEN   10
 #define MAVLINK_V2_SIG_LEN   13
 #define MAVLINK_IFLAG_SIGNED 0x01
+#define MAVLINK_IFLAG_ENCRYPTED 0x02  // Flag para mensajes cifrados con ASCON
 
 //Construir el nonce para ASCON:
 // A 128-bit value is used only once, ensuring
@@ -360,6 +361,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                         
                         memcpy(out, buf, MAVLINK_V2_HDR_LEN);  // copia header
                         out[1] = in_payload_len + CRYPTO_ABYTES; // nuevo LEN
+                        out[2] |= MAVLINK_IFLAG_ENCRYPTED; // marcar como cifrado
+                        printf("[CIFRADO] Marcando mensaje como cifrado (incompat_flags=0x%02X)\n", out[2]);
 
                         // AAD + Nonce
                         uint8_t aad[16];

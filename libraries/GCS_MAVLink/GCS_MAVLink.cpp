@@ -495,13 +495,21 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                             printf("[CIFRADO] Flag INCOMPAT en posición 2: 0x%02X (¿cifrado? %s)\n", 
                                    out[2], (out[2] & 0x02) ? "SÍ" : "NO");
                             
+                            // DEBUG: Verificar estado de canales
+                            printf("[CIFRADO] Verificando canales...\n");
+                            printf("[CIFRADO] valid_channel(MAVLINK_COMM_1): %s\n", valid_channel(MAVLINK_COMM_1) ? "true" : "false");
+                            printf("[CIFRADO] mavlink_comm_port[MAVLINK_COMM_1]: %p\n", mavlink_comm_port[MAVLINK_COMM_1]);
+                            printf("[CIFRADO] Canal original %u - mavlink_comm_port[chan]: %p\n", (unsigned)chan, mavlink_comm_port[chan]);
+                            
                             // Verificar que el Canal 1 esté disponible
                             size_t written = 0;  // Declarar fuera del if/else
                             if (valid_channel(MAVLINK_COMM_1) && mavlink_comm_port[MAVLINK_COMM_1] != nullptr) {
+                                printf("[CIFRADO] Intentando escribir %u bytes al Canal 1...\n", out_len);
                                 written = mavlink_comm_port[MAVLINK_COMM_1]->write(out, out_len);
                                 printf("[CIFRADO] ¡Mensaje cifrado enviado al Canal 1! Written=%zu bytes\n", written);
                             } else {
                                 // Fallback al canal original
+                                printf("[CIFRADO] Canal 1 no disponible, usando Canal %u\n", (unsigned)chan);
                                 written = mavlink_comm_port[chan]->write(out, out_len);
                                 printf("[CIFRADO] Canal 1 no disponible, enviado al Canal %u. Written=%zu bytes\n", (unsigned)chan, written);
                             }

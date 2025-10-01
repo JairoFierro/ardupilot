@@ -367,7 +367,6 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
             printf("[CIFRADO] Mensaje completo: len=%u >= expected=%u\n", len, expected_len);
             
             const uint8_t  incompat_flags = buf[2];
-            const uint8_t  compat_flags   = buf[3];
             const uint8_t  seq            = buf[4];
             const uint8_t  sysid          = buf[5];
             const uint8_t  compid         = buf[6];

@@ -407,10 +407,10 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
 
                         // AAD + Nonce
                         uint8_t aad[16];
-                        const size_t aad_len = build_aad(aad, incompat_flags, compat_flags, seq, sysid, compid, msgid);
+                        const size_t aad_len = build_aad(aad, out[2], compat_flags, seq, sysid, compid, msgid);
 
                         printf("[CIFRADO] sysid=%u, compid=%u, seq=%u\n", sysid, compid, seq);
-                        printf("[CIFRADO] incompat_flags=0x%02X, compat_flags=0x%02X\n", incompat_flags, compat_flags);
+                        printf("[CIFRADO] incompat_flags=0x%02X (actualizado), compat_flags=0x%02X\n", out[2], compat_flags);
                         printf("[CIFRADO] AAD (%zu bytes): ", aad_len);
                         for(size_t i = 0; i < aad_len && i < 16; i++) {
                             printf("%02X ", aad[i]);

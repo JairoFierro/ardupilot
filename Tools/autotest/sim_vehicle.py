@@ -884,7 +884,7 @@ def start_mavproxy(opts, stuff):
 
     for i in instances:
         if not opts.no_extra_ports:
-            ports = [14550 + 10 * i]
+            ports = [14550 + 10 * i, 14551 + 10 * i]  # Agregar puerto 14551 para mensajes cifrados
             for port in ports:
                 if under_vagrant():
                     # We're running inside of a vagrant guest; forward our

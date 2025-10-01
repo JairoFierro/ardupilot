@@ -1968,8 +1968,19 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
         if (framing == MAVLINK_FRAMING_OK) {
             hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
             
+            // DEBUG: Mostrar TODOS los mensajes que llegan
+            static uint32_t msg_count = 0;
+            msg_count++;
+            if (msg_count % 100 == 0) {  // Cada 100 mensajes para no hacer spam
+                printf("[DEBUG] Mensajes recibidos: %u total\n", msg_count);
+            }
+            
              // descifrado
                 if (msg.magic == 0xFD) {  // MAVLink v2
+                    // DEBUG: Mostrar todos los mensajes MAVLink v2
+                    printf("[DEBUG] MAVLink v2 recibido: msgid=%u, sysid=%u, compid=%u, incompat_flags=0x%02X\n", 
+                           msg.msgid, msg.sysid, msg.compid, msg.incompat_flags);
+                    
                     // Solo descifrar si el mensaje está marcado como cifrado
                     if (msg.incompat_flags & MAVLINK_IFLAG_ENCRYPTED) {
                         printf("[DESCIFRADO] Mensaje marcado como cifrado - msgid=%u, sysid=%u, compid=%u\n", 

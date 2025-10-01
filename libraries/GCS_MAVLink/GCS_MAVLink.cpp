@@ -311,7 +311,22 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
  */
 void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 {
-    // Cifrado ASCON para mensajes MAVLink v2
+    // DEBUG: Mostrar información del canal
+    printf("[CIFRADO] Canal=%u, len=%u\n", (unsigned)chan, len);
+    
+    // NO CIFRAR mensajes del canal 0 (MAVProxy/Console) para mantener compatibilidad
+    if (chan == MAVLINK_COMM_0) {
+        printf("[CIFRADO] SKIP: Canal 0 (MAVProxy), enviando sin cifrar\n");
+        const size_t written = mavlink_comm_port[chan]->write(buf, len);
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+        if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
+            AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
+        }
+#endif
+        return;
+    }
+    
+    // Cifrado ASCON para mensajes MAVLink v2 (solo canales != 0)
     if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {
         const uint8_t  in_payload_len = buf[1];
         

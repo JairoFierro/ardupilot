@@ -331,8 +331,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
         printf("[CIFRADO] **FORZANDO** Cifrado para prueba (msg #%u) - Enviará por Canal %u\n", msg_count, (unsigned)chan);
     }
     
-    // **TEMPORAL**: Permitir cifrado en Canal 0 para pruebas
-    if (false && test_chan == MAVLINK_COMM_0 && !force_encrypt) {  // Deshabilitado temporalmente
+    // NO CIFRAR mensajes del canal 0 (MAVProxy necesita mensajes legibles)
+    if (test_chan == MAVLINK_COMM_0 && !force_encrypt) {
         printf("[CIFRADO] SKIP: Canal 0 (MAVProxy), enviando sin cifrar\n");
         const size_t written = mavlink_comm_port[chan]->write(buf, len);  // Usar chan original para el envío real
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -495,25 +495,35 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                             printf("[CIFRADO] Flag INCOMPAT en posición 2: 0x%02X (¿cifrado? %s)\n", 
                                    out[2], (out[2] & 0x02) ? "SÍ" : "NO");
                             
-                            // **SIMPLIFICADO**: Enviar siempre por canal original con flag de cifrado
-                            printf("[CIFRADO] Enviando mensaje cifrado por Canal %u (puerto original)\n", (unsigned)chan);
-                            size_t written = mavlink_comm_port[chan]->write(out, out_len);
-                            printf("[CIFRADO] ¡Mensaje cifrado enviado! Canal=%u, Written=%zu bytes\n", (unsigned)chan, written);
+                            // **DOBLE ENVÍO**: 
+                            // 1. Enviar mensaje ORIGINAL sin cifrar al canal actual (MAVProxy)
+                            // 2. Enviar mensaje CIFRADO al puerto UDP 14551
                             
-#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-                            // Verificación de error
-                            if (written < out_len) {
-                                printf("[CIFRADO] ADVERTENCIA: Escritura incompleta %zu < %u\n", written, out_len);
+                            // 1. Envío normal para MAVProxy
+                            printf("[CIFRADO] Enviando mensaje NORMAL al Canal %u (MAVProxy)\n", (unsigned)chan);
+                            size_t written_normal = mavlink_comm_port[chan]->write(buf, len);  // mensaje original
+                            printf("[CIFRADO] Mensaje normal enviado: Written=%zu bytes\n", written_normal);
+                            
+                            // 2. Envío cifrado al Canal 1 (puerto 14551) si está disponible
+                            if (valid_channel(MAVLINK_COMM_1) && mavlink_comm_port[MAVLINK_COMM_1] != nullptr) {
+                                printf("[CIFRADO] Enviando mensaje CIFRADO al Canal 1 (puerto 14551)\n");
+                                size_t written_encrypted = mavlink_comm_port[MAVLINK_COMM_1]->write(out, out_len);
+                                printf("[CIFRADO] Mensaje cifrado enviado: Written=%zu bytes\n", written_encrypted);
+                                
+                                if (written_encrypted == 0) {
+                                    printf("[CIFRADO] ADVERTENCIA: No hay conexiones en puerto 14551\n");
+                                }
+                            } else {
+                                printf("[CIFRADO] Canal 1 no disponible - solo enviado normal\n");
                             }
-#endif
-                            printf("[CIFRADO] ¡Mensaje cifrado enviado exitosamente! Written=%zu bytes\n", written);
                             
-                            // DEBUG: Mostrar primeros bytes del mensaje enviado
-                            printf("[CIFRADO] Mensaje enviado (primeros 20 bytes): ");
+                            // DEBUG: Mostrar primeros bytes del mensaje cifrado
+                            printf("[CIFRADO] Mensaje cifrado (primeros 20 bytes): ");
                             for(int i = 0; i < 20 && i < out_len; i++) {
                                 printf("%02X ", out[i]);
                             }
                             printf("\n");
+                            printf("[CIFRADO] ¡CIFRADO ASCON COMPLETADO!\n");
                             return;
                         } else {
                             printf("[CIFRADO] ERROR: Cifrado falló - rc=%d, clen_out=%llu\n", rc, clen_out);

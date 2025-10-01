@@ -488,8 +488,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                                    out_len, payload_end);
 
                             // **TEMPORAL**: Enviar mensaje cifrado por Canal 1 (puerto 14551) para evitar conflictos
-                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes al CANAL 1 (puerto 14551)\n", out_len);
-                            printf("[CIFRADO] Puerto destino: mavlink_comm_port[1]\n");
+                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes al CANAL 2 (puerto 14552)\n", out_len);
+                            printf("[CIFRADO] Puerto destino: mavlink_comm_port[2]\n");
                             
                             // DEBUG: Verificar flag antes del envío
                             printf("[CIFRADO] VERIFICACION FINAL - Mensaje a enviar (primeros 10 bytes): ");
@@ -509,17 +509,17 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                             size_t written_normal = mavlink_comm_port[chan]->write(buf, len);  // mensaje original
                             printf("[CIFRADO] Mensaje normal enviado: Written=%zu bytes\n", written_normal);
                             
-                            // 2. Envío cifrado al Canal 1 (puerto 14551) si está disponible
-                            if (valid_channel(MAVLINK_COMM_1) && mavlink_comm_port[MAVLINK_COMM_1] != nullptr) {
-                                printf("[CIFRADO] Enviando mensaje CIFRADO al Canal 1 (puerto 14551)\n");
-                                size_t written_encrypted = mavlink_comm_port[MAVLINK_COMM_1]->write(out, out_len);
+                            // 2. Envío cifrado al Canal 2 (puerto 14552) si está disponible
+                            if (valid_channel(MAVLINK_COMM_2) && mavlink_comm_port[MAVLINK_COMM_2] != nullptr) {
+                                printf("[CIFRADO] Enviando mensaje CIFRADO al Canal 2 (puerto 14552)\n");
+                                size_t written_encrypted = mavlink_comm_port[MAVLINK_COMM_2]->write(out, out_len);
                                 printf("[CIFRADO] Mensaje cifrado enviado: Written=%zu bytes\n", written_encrypted);
                                 
                                 if (written_encrypted == 0) {
-                                    printf("[CIFRADO] ADVERTENCIA: No hay conexiones en puerto 14551\n");
+                                    printf("[CIFRADO] ADVERTENCIA: No hay conexiones en puerto 14552\n");
                                 }
                             } else {
-                                printf("[CIFRADO] Canal 1 no disponible - solo enviado normal\n");
+                                printf("[CIFRADO] Canal 2 no disponible - solo enviado normal\n");
                             }
                             
                             // DEBUG: Mostrar primeros bytes del mensaje cifrado

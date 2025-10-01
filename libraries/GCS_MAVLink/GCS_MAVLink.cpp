@@ -37,6 +37,11 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <stdint.h>
 #include <string.h>
 
+// Socket includes para envío UDP directo
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 // ASCON libreria
 #include "../ascon/api.h"
 #include "../ascon/crypto_aead.h"
@@ -488,8 +493,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                                    out_len, payload_end);
 
                             // **TEMPORAL**: Enviar mensaje cifrado por Canal 1 (puerto 14551) para evitar conflictos
-                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes al CANAL 2 (puerto 14552)\n", out_len);
-                            printf("[CIFRADO] Puerto destino: mavlink_comm_port[2]\n");
+                            printf("[CIFRADO] Enviando mensaje cifrado de %u bytes al PUERTO UDP 15550\n", out_len);
+                            printf("[CIFRADO] Puerto destino: UDP directo 127.0.0.1:15550\n");
                             
                             // DEBUG: Verificar flag antes del envío
                             printf("[CIFRADO] VERIFICACION FINAL - Mensaje a enviar (primeros 10 bytes): ");
@@ -509,17 +514,35 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                             size_t written_normal = mavlink_comm_port[chan]->write(buf, len);  // mensaje original
                             printf("[CIFRADO] Mensaje normal enviado: Written=%zu bytes\n", written_normal);
                             
-                            // 2. Envío cifrado al Canal 2 (puerto 14552) si está disponible
-                            if (valid_channel(MAVLINK_COMM_2) && mavlink_comm_port[MAVLINK_COMM_2] != nullptr) {
-                                printf("[CIFRADO] Enviando mensaje CIFRADO al Canal 2 (puerto 14552)\n");
-                                size_t written_encrypted = mavlink_comm_port[MAVLINK_COMM_2]->write(out, out_len);
-                                printf("[CIFRADO] Mensaje cifrado enviado: Written=%zu bytes\n", written_encrypted);
+                            // 2. **NUEVA ESTRATEGIA**: Crear socket UDP directo para cifrado
+                            // Usar puerto 15550 (no usado por MAVProxy)
+                            static int crypto_socket = -1;
+                            static struct sockaddr_in crypto_addr;
+                            
+                            if (crypto_socket < 0) {
+                                // Crear socket UDP solo una vez
+                                crypto_socket = socket(AF_INET, SOCK_DGRAM, 0);
+                                if (crypto_socket >= 0) {
+                                    crypto_addr.sin_family = AF_INET;
+                                    crypto_addr.sin_port = htons(15550);
+                                    crypto_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+                                    printf("[CIFRADO] Socket UDP cifrado creado para puerto 15550\n");
+                                } else {
+                                    printf("[CIFRADO] ERROR: No se pudo crear socket UDP\n");
+                                }
+                            }
+                            
+                            if (crypto_socket >= 0) {
+                                printf("[CIFRADO] Enviando mensaje CIFRADO al puerto UDP 15550\n");
+                                ssize_t sent = sendto(crypto_socket, out, out_len, 0, 
+                                                    (struct sockaddr*)&crypto_addr, sizeof(crypto_addr));
+                                printf("[CIFRADO] Mensaje cifrado enviado: %zd bytes\n", sent);
                                 
-                                if (written_encrypted == 0) {
-                                    printf("[CIFRADO] ADVERTENCIA: No hay conexiones en puerto 14552\n");
+                                if (sent != (ssize_t)out_len) {
+                                    printf("[CIFRADO] ADVERTENCIA: Envío incompleto %zd < %u\n", sent, out_len);
                                 }
                             } else {
-                                printf("[CIFRADO] Canal 2 no disponible - solo enviado normal\n");
+                                printf("[CIFRADO] Socket UDP no disponible - solo enviado normal\n");
                             }
                             
                             // DEBUG: Mostrar primeros bytes del mensaje cifrado

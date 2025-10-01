@@ -496,18 +496,21 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
                                    out[2], (out[2] & 0x02) ? "SÍ" : "NO");
                             
                             // Verificar que el Canal 1 esté disponible
+                            size_t written = 0;  // Declarar fuera del if/else
                             if (valid_channel(MAVLINK_COMM_1) && mavlink_comm_port[MAVLINK_COMM_1] != nullptr) {
-                                const size_t written = mavlink_comm_port[MAVLINK_COMM_1]->write(out, out_len);
+                                written = mavlink_comm_port[MAVLINK_COMM_1]->write(out, out_len);
                                 printf("[CIFRADO] ¡Mensaje cifrado enviado al Canal 1! Written=%zu bytes\n", written);
                             } else {
                                 // Fallback al canal original
-                                const size_t written = mavlink_comm_port[chan]->write(out, out_len);
+                                written = mavlink_comm_port[chan]->write(out, out_len);
                                 printf("[CIFRADO] Canal 1 no disponible, enviado al Canal %u. Written=%zu bytes\n", (unsigned)chan, written);
                             }
                             
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-                            // Verificación de error (usar chan para compatibilidad)
-                            const size_t written_check = out_len; // Asumir éxito para evitar panic
+                            // Verificación de error
+                            if (written < out_len) {
+                                printf("[CIFRADO] ADVERTENCIA: Escritura incompleta %zu < %u\n", written, out_len);
+                            }
 #endif
                             printf("[CIFRADO] ¡Mensaje cifrado enviado exitosamente! Written=%zu bytes\n", written);
                             

@@ -331,8 +331,8 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
         printf("[CIFRADO] **FORZANDO** Cifrado para prueba (msg #%u) - Enviará por Canal %u\n", msg_count, (unsigned)chan);
     }
     
-    // NO CIFRAR mensajes del canal 0 - usar test_chan para la lógica
-    if (test_chan == MAVLINK_COMM_0 && !force_encrypt) {
+    // **TEMPORAL**: Permitir cifrado en Canal 0 para pruebas
+    if (false && test_chan == MAVLINK_COMM_0 && !force_encrypt) {  // Deshabilitado temporalmente
         printf("[CIFRADO] SKIP: Canal 0 (MAVProxy), enviando sin cifrar\n");
         const size_t written = mavlink_comm_port[chan]->write(buf, len);  // Usar chan original para el envío real
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL

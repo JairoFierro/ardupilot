@@ -16,18 +16,22 @@ from typing import Optional, Tuple, List
 
 # === Dependencias ===
 try:
-    from pymavlink import mavutil, mavlink
+    from pymavlink import mavutil
     from pymavlink.dialects.v20 import ardupilotmega as mavlink_dialect
-except ImportError:
-    print("❌ Error: Instala pymavlink:")
+    # Importar MAVLink desde el dialecto, no desde pymavlink directamente
+    from pymavlink.dialects.v20.ardupilotmega import MAVLink
+    print("✅ pymavlink importado correctamente")
+except ImportError as e:
+    print(f"❌ Error importando pymavlink: {e}")
     print("pip install pymavlink")
     sys.exit(1)
 
 try:
     # Usar la misma biblioteca ASCON que el firmware
     import ascon
-except ImportError:
-    print("❌ Error: Instala ascon:")
+    print("✅ ascon importado correctamente")
+except ImportError as e:
+    print(f"❌ Error importando ascon: {e}")
     print("pip install ascon")
     sys.exit(1)
 
@@ -330,11 +334,11 @@ class ASCONBridge:
         
         try:
             # Crear mensaje COMMAND_LONG con pymavlink
-            mav = mavlink.MAVLink(None)
+            mav = MAVLink(None)
             msg = mav.command_long_encode(
                 target_system,           # target_system
                 target_component,        # target_component
-                mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,  # command
+                mavlink_dialect.MAV_CMD_SET_MESSAGE_INTERVAL,  # command
                 0,                       # confirmation
                 msg_id,                  # param1: message ID
                 interval_us,             # param2: interval in microseconds

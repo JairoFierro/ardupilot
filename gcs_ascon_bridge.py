@@ -235,11 +235,23 @@ class ASCONBridge:
             print(f"🔧 Ciphertext+tag ({len(ciphertext_with_tag)} bytes): {ciphertext_with_tag[:16].hex().upper()}...")
             
             # Descifrar con ASCON
+            plaintext = None
             try:
                 plaintext = ascon.decrypt(self.config.key, nonce, aad, ciphertext_with_tag)
             except Exception as e:
-                print(f"❌ DESCIFRADO FALLÓ: {e}")
-                print(f"   Posibles causas: clave incorrecta, nonce diferente, AAD diferente, tag inválido")
+                print(f"❌ DESCIFRADO FALLÓ (excepción): {e}")
+                self.stats['rx_decrypt_failed'] += 1
+                return False
+            
+            # Verificar que el descifrado fue exitoso
+            if plaintext is None:
+                print(f"❌ DESCIFRADO FALLÓ: ascon.decrypt() devolvió None")
+                print(f"   Posibles causas:")
+                print(f"   - Clave incorrecta")
+                print(f"   - Nonce diferente") 
+                print(f"   - AAD diferente")
+                print(f"   - Tag de autenticación inválido")
+                print(f"   - Datos corruptos")
                 self.stats['rx_decrypt_failed'] += 1
                 return False
             

@@ -82,7 +82,11 @@ def parse_v2_header(frame: bytes) -> Optional[Tuple[int, int, int, int, int, int
     seq = frame[4]
     sysid = frame[5]
     compid = frame[6]
-    msgid = struct.unpack('<I', frame[7:10] + b'\\x00')[0]  # 3 bytes little-endian
+    
+    # msgid son 3 bytes little-endian (bytes 7, 8, 9)
+    if len(frame) < 10:
+        return None
+    msgid = frame[7] | (frame[8] << 8) | (frame[9] << 16)
     
     return payload_len, incompat_flags, compat_flags, seq, sysid, compid, msgid
 

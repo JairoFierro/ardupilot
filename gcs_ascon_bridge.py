@@ -234,10 +234,10 @@ class ASCONBridge:
             print(f"🔧 Nonce ({len(nonce)} bytes): {nonce.hex().upper()}")
             print(f"🔧 Ciphertext+tag ({len(ciphertext_with_tag)} bytes): {ciphertext_with_tag[:16].hex().upper()}...")
             
-            # Descifrar con ASCON
+            # Descifrar con ASCON-128a (mismo algoritmo que el firmware)
             plaintext = None
             try:
-                plaintext = ascon.decrypt(self.config.key, nonce, aad, ciphertext_with_tag)
+                plaintext = ascon.decrypt(self.config.key, nonce, aad, ciphertext_with_tag, variant="Ascon-128a")
             except Exception as e:
                 print(f"❌ DESCIFRADO FALLÓ (excepción): {e}")
                 self.stats['rx_decrypt_failed'] += 1
@@ -389,8 +389,8 @@ class ASCONBridge:
             print(f"🔧 AAD cifrado: {aad.hex().upper()}")
             print(f"🔧 Nonce cifrado: {nonce.hex().upper()}")
             
-            # Cifrar con ASCON
-            ciphertext_with_tag = ascon.encrypt(self.config.key, nonce, aad, original_payload)
+            # Cifrar con ASCON-128a (mismo algoritmo que el firmware)
+            ciphertext_with_tag = ascon.encrypt(self.config.key, nonce, aad, original_payload, variant="Ascon-128a")
             
             print(f"🔧 Ciphertext+tag ({len(ciphertext_with_tag)} bytes): {ciphertext_with_tag.hex().upper()}")
             
@@ -440,10 +440,11 @@ class ASCONBridge:
     
     def run(self):
         """Ejecutar bridge"""
-        print("🚀 === Mini-GCS ASCON Bridge ===")
+        print("🚀 === Mini-GCS ASCON-128a Bridge ===")
         print(f"🔧 Puerto RX (cifrado): {RX_PORT}")
         print(f"🔧 Puerto TX (claro): {TX_PORT}")
         print(f"🔧 Flag cifrado: 0x{MAVLINK_IFLAG_ENCRYPTED:02X}")
+        print(f"🔧 Algoritmo: Ascon-128a (compatible con firmware)")
         print(f"🔧 Tag ASCON: {CRYPTO_ABYTES} bytes")
         print(f"🔧 Nonce ASCON: {CRYPTO_NPUBBYTES} bytes")
         

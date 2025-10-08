@@ -216,6 +216,8 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         printf("[DEBUG] Canal inválido o descartado\n");
         return;
     }
+
+    /*
 #if HAL_HIGH_LATENCY2_ENABLED
     // if it's a disabled high latency channel, don't send
     GCS_MAVLINK *link = gcs().chan(chan);
@@ -305,7 +307,9 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 
     // Fallback: enviar sin cifrar (para mensajes no MAVLink v2 o errores)
     printf("[FRAGMENTACION] Enviando mensaje sin procesar (%u bytes)\n", len);
+    */
     const size_t written = mavlink_comm_port[chan]->write(buf, len);
+    
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
         AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);

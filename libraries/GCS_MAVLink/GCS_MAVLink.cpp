@@ -103,7 +103,7 @@ struct mavlink_fragment_buffer_t {
     uint32_t last_fragment_ms;   // Timestamp del último fragmento (para timeout)
 };
 
-static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
+//static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
 
 mavlink_system_t mavlink_system = {7,1};
 

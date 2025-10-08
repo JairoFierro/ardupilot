@@ -332,7 +332,7 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
 {
     printf("[COMPLETE] Canal=%u, len=%u\n", (unsigned)chan, len);
     
-    // NO CIFRAR mensajes del canal 0 (MAVProxy necesita mensajes legibles)
+    /*// NO CIFRAR mensajes del canal 0 (MAVProxy necesita mensajes legibles)
     if (chan == MAVLINK_COMM_0) {
         printf("[COMPLETE] Canal 0 (MAVProxy), enviando sin cifrar\n");
         const size_t written = mavlink_comm_port[chan]->write(buf, len);
@@ -343,6 +343,7 @@ void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, u
 #endif
         return;
     }
+    */
     
     printf("[COMPLETE] Intentando CIFRADO para Canal %u\n", (unsigned)chan);
     

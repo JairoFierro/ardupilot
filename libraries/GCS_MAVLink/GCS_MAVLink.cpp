@@ -103,7 +103,7 @@ struct mavlink_fragment_buffer_t {
     uint32_t last_fragment_ms;   // Timestamp del último fragmento (para timeout)
 };
 
-//static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
+static mavlink_fragment_buffer_t fragment_buffers[MAVLINK_COMM_NUM_BUFFERS];
 
 mavlink_system_t mavlink_system = {7,1};
 
@@ -207,196 +207,281 @@ static inline size_t build_aad(uint8_t *aad,
 /*
   send a buffer out a MAVLink channel
  */
+
+// ==================== DECLARACIÓN FORWARD ====================
+void send_complete_mavlink_message(mavlink_channel_t chan, 
+                                   const uint8_t *buf, 
+                                   uint8_t len);
+
+/*
+  send a buffer out a MAVLink channel
+ */
 void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 {
-    // **ESTE PRINTF DEBE APARECER SÍ O SÍ**
-    printf("[SEND-DEBUG] Canal=%u, len=%u, buf[0]=0x%02X\n", 
-           (unsigned)chan, len, (len > 0) ? buf[0] : 0);
-    
     // Validaciones básicas
-    if (!valid_channel(chan)) {
-        printf("[SEND-DEBUG] Canal inválido\n");
-        return;
-    }
-    
-    if (mavlink_comm_port[chan] == nullptr) {
-        printf("[SEND-DEBUG] Puerto NULL\n");
-        return;
-    }
-    
-    if (chan_discard[chan]) {
-        printf("[SEND-DEBUG] Canal descartado\n");
+    if (!valid_channel(chan) || mavlink_comm_port[chan] == nullptr || chan_discard[chan]) {
         return;
     }
 
-    // **ESTRATEGIA SIMPLE**: 
-    // - Canal 0 (MAVProxy): SIN cifrar
-    // - Otros canales: Intentar cifrado ASCON
+#if HAL_HIGH_LATENCY2_ENABLED
+    // if it's a disabled high latency channel, don't send
+    GCS_MAVLINK *link = gcs().chan(chan);
+    if (link->is_high_latency_link && !gcs().get_high_latency_status()) {
+        return;
+    }
+#endif
+    if (gcs_alternative_active[chan]) {
+        // an alternative protocol is active
+        return;
+    }
+
+    // Obtener buffer de fragmentación para este canal
+    mavlink_fragment_buffer_t *frag_buf = &fragment_buffers[chan];
+    const uint32_t now_ms = AP_HAL::millis();
     
-    printf("[SEND-DEBUG] Pasó validaciones, procesando...\n");
+    // Timeout para limpiar buffer incompleto (1 segundo)
+    if (frag_buf->is_accumulating && (now_ms - frag_buf->last_fragment_ms) > 1000) {
+        printf("[FRAG] Timeout - reseteando buffer del canal %u\n", (unsigned)chan);
+        frag_buf->is_accumulating = false;
+        frag_buf->accumulated_len = 0;
+    }
+
+    // Detectar inicio de mensaje MAVLink v2
+    if (len >= 1 && buf[0] == MAVLINK_V2_STX) {
+        if (len >= MAVLINK_V2_HDR_LEN) {
+            const uint8_t payload_len = buf[1];
+            const uint16_t expected_total = MAVLINK_V2_HDR_LEN + payload_len + 2; // +2 para CRC
+            
+            printf("[FRAG] Detectado inicio MAVLink v2: len=%u, payload_len=%u, expected_total=%u\n", 
+                   len, payload_len, expected_total);
+            
+            // Si el mensaje está completo en este buffer, procesarlo directamente
+            if (len >= expected_total) {
+                printf("[FRAG] Mensaje completo en un solo fragmento\n");
+                send_complete_mavlink_message(chan, buf, expected_total);
+                return;
+            }
+            
+            // El mensaje está fragmentado - iniciar acumulación
+            printf("[FRAG] Mensaje fragmentado - iniciando acumulación\n");
+            frag_buf->is_accumulating = true;
+            frag_buf->accumulated_len = 0;
+            frag_buf->expected_len = expected_total;
+            frag_buf->last_fragment_ms = now_ms;
+            
+            // Copiar este primer fragmento
+            memcpy(frag_buf->buffer, buf, len);
+            frag_buf->accumulated_len = len;
+            printf("[FRAG] Primer fragmento acumulado: %u/%u bytes\n", 
+                   frag_buf->accumulated_len, frag_buf->expected_len);
+            return;
+        }
+    }
     
-    const bool should_encrypt = (chan != MAVLINK_COMM_0);
-    
-    if (!should_encrypt) {
-        printf("[SEND-DEBUG] Canal 0 - Enviando SIN cifrar\n");
-        const size_t written = mavlink_comm_port[chan]->write(buf, len);
-        printf("[SEND-DEBUG] Escritos %zu de %u bytes\n", written, len);
+    // Si estamos acumulando y este no es un inicio de MAVLink v2
+    if (frag_buf->is_accumulating) {
+        printf("[FRAG] Fragmento adicional recibido: len=%u\n", len);
         
+        // Verificar que cabe en el buffer y no excede el mensaje esperado
+        if (frag_buf->accumulated_len + len <= sizeof(frag_buf->buffer) && 
+            frag_buf->accumulated_len + len <= frag_buf->expected_len) {
+            
+            // Agregar este fragmento al buffer acumulado
+            memcpy(frag_buf->buffer + frag_buf->accumulated_len, buf, len);
+            frag_buf->accumulated_len += len;
+            frag_buf->last_fragment_ms = now_ms;
+            
+            printf("[FRAG] Fragmento acumulado: %u/%u bytes\n", 
+                   frag_buf->accumulated_len, frag_buf->expected_len);
+            
+            // ¿Tenemos el mensaje completo?
+            if (frag_buf->accumulated_len >= frag_buf->expected_len) {
+                printf("[FRAG] ¡Mensaje completo reconstruido!\n");
+                
+                // Procesar mensaje completo
+                send_complete_mavlink_message(chan, frag_buf->buffer, frag_buf->expected_len);
+                
+                // Resetear buffer
+                frag_buf->is_accumulating = false;
+                frag_buf->accumulated_len = 0;
+            }
+            return;
+        } else {
+            printf("[FRAG] ERROR: Fragmento excede límites esperados\n");
+            frag_buf->is_accumulating = false;
+        }
+    }
+
+    // Fallback: enviar sin cifrar (para mensajes no MAVLink v2 o errores)
+    printf("[FRAG] Enviando mensaje sin procesar (%u bytes)\n", len);
+    const size_t written = mavlink_comm_port[chan]->write(buf, len);
+    
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+    if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
+        AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
+    }
+#else
+    (void)written;
+#endif
+}
+
+/*
+  Procesar y enviar un mensaje MAVLink completo (con cifrado si aplica)
+ */
+void send_complete_mavlink_message(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
+{
+    printf("[COMPLETE] Canal=%u, len=%u\n", (unsigned)chan, len);
+    
+    // NO CIFRAR mensajes del canal 0 (MAVProxy necesita mensajes legibles)
+    if (chan == MAVLINK_COMM_0) {
+        printf("[COMPLETE] Canal 0 (MAVProxy), enviando sin cifrar\n");
+        const size_t written = mavlink_comm_port[chan]->write(buf, len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
         if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
-            AP_HAL::panic("Short write on UART: %lu < %u", 
-                         (unsigned long)written, len);
+            AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
         }
 #endif
         return;
     }
     
-    printf("[SEND-DEBUG] Canal %u - Intentando cifrado ASCON\n", (unsigned)chan);
+    printf("[COMPLETE] Intentando CIFRADO para Canal %u\n", (unsigned)chan);
     
-    // Verificar que es MAVLink v2
-    if (len < MAVLINK_V2_HDR_LEN || buf[0] != MAVLINK_V2_STX) {
-        printf("[SEND-DEBUG] No es MAVLink v2 o muy corto, enviando sin cifrar\n");
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
+    // Cifrado ASCON para mensajes MAVLink v2 (solo canales != 0)
+    if (len >= MAVLINK_V2_HDR_LEN && buf[0] == MAVLINK_V2_STX) {
+        const uint8_t  in_payload_len = buf[1];
+        
+        printf("[COMPLETE] Detectado MAVLink v2: len=%u, payload_len=%u\n", len, in_payload_len);
+        
+        // Verificar que tenemos un mensaje completo
+        const uint16_t expected_len = MAVLINK_V2_HDR_LEN + in_payload_len + 2; // +2 para CRC
+        if (len >= expected_len) {
+            printf("[COMPLETE] Mensaje completo: len=%u >= expected=%u\n", len, expected_len);
+            
+            const uint8_t  incompat_flags = buf[2];
+            const uint8_t  compat_flags   = buf[3];
+            const uint8_t  seq            = buf[4];
+            const uint8_t  sysid          = buf[5];
+            const uint8_t  compid         = buf[6];
+            const uint32_t msgid          = (uint32_t)buf[7] | ((uint32_t)buf[8] << 8) | ((uint32_t)buf[9] << 16);
+
+            printf("[COMPLETE] msgid=%u, seq=%u, sysid=%u, compid=%u\n", msgid, seq, sysid, compid);
+            
+            const bool signed_frame = (incompat_flags & MAVLINK_IFLAG_SIGNED) != 0;
+
+            // Cifrar solo frames no firmados
+            if (!signed_frame) {
+                printf("[COMPLETE] Frame no firmado, procediendo a cifrar\n");
+                
+                // Verificar que el payload + tag cabe en el campo LEN (0-255)
+                if ((uint16_t)in_payload_len + CRYPTO_ABYTES <= 255) {
+                    printf("[COMPLETE] Tamaño OK: payload=%u + tag=%u = %u <= 255\n", 
+                           in_payload_len, CRYPTO_ABYTES, in_payload_len + CRYPTO_ABYTES);
+                    
+                    // Buscar crc_extra del msgid
+                    const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
+                    if (entry != nullptr) {
+                        printf("[COMPLETE] Entrada msgid encontrada, crc_extra=0x%02X\n", entry->crc_extra);
+                        
+                        const uint8_t crc_extra = entry->crc_extra;
+                        
+                        // Buffer de salida: header + payload_cifrado + tag + CRC
+                        uint8_t out[300];
+                        
+                        memcpy(out, buf, MAVLINK_V2_HDR_LEN);  // copia header
+                        out[1] = in_payload_len + CRYPTO_ABYTES; // nuevo LEN
+                        out[2] |= MAVLINK_IFLAG_ENCRYPTED; // marcar como cifrado
+                        printf("[COMPLETE] Marcando mensaje como cifrado (incompat_flags=0x%02X)\n", out[2]);
+
+                        // AAD + Nonce
+                        uint8_t aad[16];
+                        const size_t aad_len = build_aad(aad, out[2], compat_flags, seq, sysid, compid, msgid);
+
+                        uint8_t npub[CRYPTO_NPUBBYTES];
+                        build_nonce(npub, g_ascon_ctx.iv_boot, sysid, compid, seq);
+
+                        // Punteros a payload
+                        const uint8_t *m_in  = buf + MAVLINK_V2_HDR_LEN;     // plaintext (input)
+                        uint8_t       *c_out = out + MAVLINK_V2_HDR_LEN;     // ciphertext (output)
+
+                        // Llamada a ASCON
+                        unsigned long long clen_out = 0ULL;
+                        printf("[COMPLETE] Iniciando cifrado ASCON...\n");
+                        
+                        int rc = crypto_aead_encrypt(/*c=*/(unsigned char*)c_out,
+                                                     /*clen=*/&clen_out,
+                                                     /*m=*/(const unsigned char*)m_in,
+                                                     /*mlen=*/(unsigned long long)in_payload_len,
+                                                     /*ad=*/(const unsigned char*)aad,
+                                                     /*adlen=*/(unsigned long long)aad_len,
+                                                     /*nsec=*/nullptr,
+                                                     /*npub=*/(const unsigned char*)npub,
+                                                     /*k=*/(const unsigned char*)g_ascon_ctx.key);
+                        
+                        printf("[COMPLETE] ASCON resultado: rc=%d, clen_out=%llu, esperado=%u\n", 
+                               rc, clen_out, in_payload_len + CRYPTO_ABYTES);
+                        
+                        if (rc == 0 && clen_out == (unsigned long long)(in_payload_len + CRYPTO_ABYTES)) {
+                            printf("[COMPLETE] ¡Cifrado exitoso!\n");
+                            
+                            // Recalcular CRC sobre NUEVO payload (ciphertext) + crc_extra
+                            uint16_t crc;
+                            crc_init(&crc);
+                            crc_accumulate_buffer(&crc, (const char*)c_out, out[1]);
+                            crc_accumulate(crc_extra, &crc);
+
+                            printf("[COMPLETE] CRC recalculado: 0x%04X\n", crc);
+
+                            // Escribir CRC al final
+                            const uint16_t payload_end = (uint16_t)MAVLINK_V2_HDR_LEN + out[1];
+                            out[payload_end + 0] = (uint8_t)(crc & 0xFF);
+                            out[payload_end + 1] = (uint8_t)(crc >> 8);
+
+                            const uint8_t out_len = (uint8_t)(payload_end + 2);
+                            
+                            printf("[COMPLETE] Mensaje cifrado completo: out_len=%u bytes\n", out_len);
+                            
+                            // **ENVIAR mensaje cifrado**
+                            const size_t written = mavlink_comm_port[chan]->write(out, out_len);
+                            printf("[COMPLETE] Mensaje cifrado enviado: %zu bytes\n", written);
+                            
+                            if (written != out_len) {
+                                printf("[COMPLETE] ADVERTENCIA: Envío incompleto %zu < %u\n", written, out_len);
+                            }
+                            
+                            printf("[COMPLETE] ¡CIFRADO ASCON COMPLETADO!\n");
+                            return;
+                        } else {
+                            printf("[COMPLETE] ERROR: Cifrado falló - rc=%d, clen_out=%llu\n", rc, clen_out);
+                        }
+                    } else {
+                        printf("[COMPLETE] SKIP: msgid=%u no encontrado en tabla\n", msgid);
+                    }
+                } else {
+                    printf("[COMPLETE] SKIP: Payload muy grande - %u + %u > 255\n", 
+                           in_payload_len, CRYPTO_ABYTES);
+                }
+            } else {
+                printf("[COMPLETE] SKIP: Frame firmado\n");
+            }
+        } else {
+            printf("[COMPLETE] SKIP: Mensaje incompleto - len=%u < expected=%u\n", len, expected_len);
+        }
+    } else {
+        if (len > 0) {
+            printf("[COMPLETE] SKIP: No es MAVLink v2 - len=%u, buf[0]=0x%02X\n", len, buf[0]);
+        }
     }
-    
-    const uint8_t payload_len = buf[1];
-    const uint16_t expected_len = MAVLINK_V2_HDR_LEN + payload_len + 2;
-    
-    printf("[SEND-DEBUG] MAVLink v2: payload_len=%u, expected=%u\n", 
-           payload_len, expected_len);
-    
-    if (len < expected_len) {
-        printf("[SEND-DEBUG] Mensaje incompleto (%u < %u), enviando sin cifrar\n", 
-               len, expected_len);
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
-    }
-    
-    // Extraer header
-    const uint8_t incompat_flags = buf[2];
-    const uint8_t compat_flags   = buf[3];
-    const uint8_t seq            = buf[4];
-    const uint8_t sysid          = buf[5];
-    const uint8_t compid         = buf[6];
-    const uint32_t msgid = (uint32_t)buf[7] | 
-                          ((uint32_t)buf[8] << 8) | 
-                          ((uint32_t)buf[9] << 16);
-    
-    printf("[SEND-DEBUG] msgid=%u, seq=%u, sysid=%u, compid=%u, incompat=0x%02X\n",
-           msgid, seq, sysid, compid, incompat_flags);
-    
-    // No cifrar firmados
-    if (incompat_flags & MAVLINK_IFLAG_SIGNED) {
-        printf("[SEND-DEBUG] Mensaje firmado, enviando sin cifrar\n");
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
-    }
-    
-    // Verificar tamaño
-    if ((uint16_t)payload_len + CRYPTO_ABYTES > 255) {
-        printf("[SEND-DEBUG] Payload muy grande para cifrar\n");
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
-    }
-    
-    // Buscar crc_extra
-    const mavlink_msg_entry_t *entry = mavlink_get_msg_entry(msgid);
-    if (entry == nullptr) {
-        printf("[SEND-DEBUG] msgid=%u no encontrado en tabla\n", msgid);
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
-    }
-    
-    const uint8_t crc_extra = entry->crc_extra;
-    printf("[SEND-DEBUG] crc_extra=0x%02X\n", crc_extra);
-    
-    // **CIFRAR**
-    printf("[SEND-DEBUG] *** INICIANDO CIFRADO ASCON ***\n");
-    
-    uint8_t encrypted[300];
-    
-    // Copiar header y modificar
-    memcpy(encrypted, buf, MAVLINK_V2_HDR_LEN);
-    encrypted[1] = payload_len + CRYPTO_ABYTES;
-    encrypted[2] |= MAVLINK_IFLAG_ENCRYPTED;
-    
-    printf("[SEND-DEBUG] Nuevo LEN=%u, incompat_flags=0x%02X\n", 
-           encrypted[1], encrypted[2]);
-    
-    // Construir AAD
-    uint8_t aad[16];
-    const size_t aad_len = build_aad(aad, encrypted[2], compat_flags, 
-                                     seq, sysid, compid, msgid);
-    
-    // Construir Nonce
-    uint8_t npub[CRYPTO_NPUBBYTES];
-    build_nonce(npub, g_ascon_ctx.iv_boot, sysid, compid, seq);
-    
-    // Cifrar
-    const uint8_t *plaintext  = buf + MAVLINK_V2_HDR_LEN;
-    uint8_t       *ciphertext = encrypted + MAVLINK_V2_HDR_LEN;
-    
-    unsigned long long clen_out = 0;
-    printf("[SEND-DEBUG] Llamando crypto_aead_encrypt...\n");
-    
-    int rc = crypto_aead_encrypt(
-        ciphertext,
-        &clen_out,
-        plaintext,
-        payload_len,
-        aad,
-        aad_len,
-        nullptr,
-        npub,
-        g_ascon_ctx.key
-    );
-    
-    printf("[SEND-DEBUG] crypto_aead_encrypt retornó: rc=%d, clen=%llu\n", 
-           rc, clen_out);
-    
-    if (rc != 0 || clen_out != (unsigned long long)(payload_len + CRYPTO_ABYTES)) {
-        printf("[SEND-DEBUG] ¡ERROR! Cifrado falló\n");
-        mavlink_comm_port[chan]->write(buf, len);
-        return;
-    }
-    
-    printf("[SEND-DEBUG] ¡Cifrado exitoso!\n");
-    
-    // Recalcular CRC
-    uint16_t crc;
-    crc_init(&crc);
-    crc_accumulate_buffer(&crc, (const char*)ciphertext, encrypted[1]);
-    crc_accumulate(crc_extra, &crc);
-    
-    printf("[SEND-DEBUG] CRC calculado: 0x%04X\n", crc);
-    
-    // Escribir CRC
-    const uint16_t payload_end = MAVLINK_V2_HDR_LEN + encrypted[1];
-    encrypted[payload_end + 0] = (uint8_t)(crc & 0xFF);
-    encrypted[payload_end + 1] = (uint8_t)(crc >> 8);
-    
-    const uint8_t final_len = payload_end + 2;
-    
-    printf("[SEND-DEBUG] Mensaje cifrado completo: %u bytes\n", final_len);
-    
-    // **ENVIAR**
-    const size_t written = mavlink_comm_port[chan]->write(encrypted, final_len);
-    
-    printf("[SEND-DEBUG] Escritos %zu de %u bytes cifrados\n", written, final_len);
-    
-    if (written != final_len) {
-        printf("[SEND-DEBUG] ¡ADVERTENCIA! Envío incompleto\n");
-    }
-    
+
+    // Fallback: enviar sin cifrar
+    printf("[COMPLETE] Enviando mensaje SIN cifrar (%u bytes)\n", len);
+    const size_t written = mavlink_comm_port[chan]->write(buf, len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
-    if (written < final_len && !mavlink_comm_port[chan]->is_write_locked()) {
-        AP_HAL::panic("Short write on UART: %lu < %u", 
-                     (unsigned long)written, final_len);
+    if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
+        AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
     }
+#else
+    (void)written;
 #endif
-    
-    printf("[SEND-DEBUG] *** FIN CIFRADO ASCON ***\n");
 }
 
 

@@ -1979,31 +1979,23 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
                 if (msg.magic == 0xFD) {  // MAVLink v2
                     // DEBUG: Mostrar todos los mensajes MAVLink v2
                     printf("[DEBUG] MAVLink v2 recibido: msgid=%u, sysid=%u, compid=%u, incompat_flags=0x%02X\n", 
-                           msg.msgid, msg.sysid, msg.compid, msg.incompat_flags);
+                            msg.msgid, msg.sysid, msg.compid, msg.incompat_flags);
                     
                     // Solo descifrar si el mensaje está marcado como cifrado
                     if (msg.incompat_flags & MAVLINK_IFLAG_ENCRYPTED) {
-                        printf("[DESCIFRADO] Mensaje marcado como cifrado - msgid=%u, sysid=%u, compid=%u\n", 
+                        printf("[DESCIFRADO] Mensaje CIFRADO detectado - msgid=%u, sysid=%u, compid=%u\n", 
                                msg.msgid, msg.sysid, msg.compid);
-                        printf("[DESCIFRADO] incompat_flags=0x%02X\n", msg.incompat_flags);
                         
                         if (!ascon_decrypt_msg_payload_inplace(&msg)) {
-                            printf("[DESCIFRADO] ERROR: Falló el descifrado, descartando mensaje\n");
+                            printf("[DESCIFRADO] ERROR: Falló el descifrado\n");
                             parsed_packet = true;
                             gcs_alternative_active[chan] = false;
                             alternative.last_mavlink_ms = now_ms;
-                            hal.util->persistent_data.last_mavlink_msgid = 0;
+                            hal.util->persistent_data.last_mavlink_cmd = 0;
                             continue;
-                        } else {
-                            printf("[DESCIFRADO] ¡Descifrado exitoso! Payload descifrado disponible\n");
-                            // Mensaje descifrado correctamente, continuar procesamiento normal
                         }
-                    } else {
-                        // Solo mostrar debug para mensajes no nuestros para reducir spam
-                        if (msg.sysid != 1) {
-                            printf("[DESCIFRADO] Mensaje no cifrado (externo) - msgid=%u, sysid=%u, compid=%u\n", 
-                                   msg.msgid, msg.sysid, msg.compid);
-                        }
+                        
+                        printf("[DESCIFRADO] ¡Descifrado exitoso!\n");
                     }
                 }
             // descifrado

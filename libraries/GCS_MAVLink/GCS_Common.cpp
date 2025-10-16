@@ -82,6 +82,7 @@
 #define CHACHA_KEY_LEN   32
 #define CHACHA_NONCE_LEN 12
 #define CHACHA_TAG_LEN   16
+#define MAVLINK_V2_STX 0xFD
 #include <sys/random.h>
 #include <hacl/include/Hacl_AEAD_Chacha20Poly1305.h>
 #include "GCS_Crypto.h"

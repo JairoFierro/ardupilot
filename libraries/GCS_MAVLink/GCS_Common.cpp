@@ -1989,7 +1989,7 @@ static bool chacha_decrypt_msg_payload_inplace(mavlink_message_t *msg)
     build_nonce12_scq(nonce, g_chacha_ctx.iv_boot, msg->sysid, msg->compid, msg->seq);
 
     // [cipher || tag]
-    uint8_t *payload = _MAV_PAYLOAD_NON_CONST(msg);
+    uint8_t *payload = reinterpret_cast<uint8_t*>(_MAV_PAYLOAD_NON_CONST(msg));
     uint8_t *tag = payload + cipher_len;
 
     uint32_t ok = Hacl_AEAD_Chacha20Poly1305_decrypt(

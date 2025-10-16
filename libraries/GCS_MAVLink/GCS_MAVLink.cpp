@@ -90,11 +90,11 @@ mavlink_system_t mavlink_system = {7,1};
 MAVLink_routing GCS_MAVLINK::routing;
 
 GCS_MAVLINK *GCS_MAVLINK::find_by_mavtype_and_compid(uint8_t mav_type, uint8_t compid, uint8_t &sysid) {
-    mavlink_channel_t channel;
-    if (!routing.find_by_mavtype_and_compid(mav_type, compid, sysid, channel)) {
+    mavlink_channel_t found_channel;
+    if (!routing.find_by_mavtype_and_compid(mav_type, compid, sysid, found_channel)) {
         return nullptr;
     }
-    return gcs().chan(channel);
+    return gcs().chan(found_channel);
 }
 
 // set a channel as private. Private channels get sent heartbeats, but

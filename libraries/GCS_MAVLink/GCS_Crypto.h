@@ -17,7 +17,7 @@ typedef struct {
 extern chacha_ctx_t g_chacha_ctx;
 
 // Helpers compartidos (declaraciones)
-uint32_t build_aad_v2(uint8_t aad[10],
+static inline uint32_t build_aad_v2(uint8_t aad[10],
                       uint8_t len_field,
                       uint8_t incompat_flags,
                       uint8_t compat_flags,

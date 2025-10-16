@@ -2243,7 +2243,6 @@ void GCS_MAVLINK::log_mavlink_stats()
     AP::logger().WriteBlock(&pkt, sizeof(pkt));
 }
 #endif
-} //Corrección
 /*
   send the SYSTEM_TIME message
  */

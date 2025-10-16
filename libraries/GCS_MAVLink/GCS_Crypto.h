@@ -26,7 +26,7 @@ static inline uint32_t build_aad_v2(uint8_t aad[10],
                       uint8_t compid,
                       uint32_t msgid);
 
-void build_nonce12_scq(uint8_t n[CHACHA_NONCE_LEN],
+static inline void build_nonce12_scq(uint8_t n[CHACHA_NONCE_LEN],
                        uint64_t iv_boot,
                        uint8_t sysid,
                        uint8_t compid,

@@ -3349,9 +3349,9 @@ MAV_RESULT GCS_MAVLINK::set_message_interval(uint32_t msg_id, int32_t interval_u
  */
 MAV_RESULT GCS::set_message_interval(uint8_t port_num, uint32_t msg_id, int32_t interval_us)
 {
-    uint8_t channel = get_channel_from_port_number(port_num);
+    uint8_t local_channel = get_channel_from_port_number(port_num);
 
-    GCS_MAVLINK *link = chan(channel);
+    GCS_MAVLINK *link = chan(local_channel);
     if (link == nullptr) {
         return MAV_RESULT_FAILED;
     }

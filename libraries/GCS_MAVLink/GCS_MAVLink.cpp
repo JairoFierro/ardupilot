@@ -264,7 +264,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 
                 uint16_t crc;
                 crc_init(&crc);
-                crc_accumulate_buffer(&crc, ct, new_len);
+                crc_accumulate_buffer(&crc, reinterpret_cast<const char*>(ct), new_len);
                 crc_accumulate(crc_extra, &crc);
 
                 const uint16_t payload_end = MAVLINK_V2_HDR_LEN + new_len;

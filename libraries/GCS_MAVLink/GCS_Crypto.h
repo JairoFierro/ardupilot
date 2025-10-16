@@ -33,4 +33,4 @@ void build_nonce12_scq(uint8_t n[CHACHA_NONCE_LEN],
                        uint8_t seq);
 
 // Inicialización (clave/iv_boot)
-void chacha_init_once(void);
+static inline void chacha_init_once(void);

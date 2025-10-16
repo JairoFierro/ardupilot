@@ -149,7 +149,7 @@ static inline void generate_random(uint8_t *buf, size_t len) {
     }
 }
 
-static inline void chacha_init_once() {
+void chacha_init_once() {
     static bool inited = false;
     if (!inited) {
         generate_random(g_chacha_ctx.key, CHACHA_KEY_LEN);

@@ -80,6 +80,18 @@
 
 #include <stdio.h>
 
+
+// Después de los includes existentes
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+
+// Activar cifrado (mismo valor que en GCS_MAVLink.cpp)
+#define MAVLINK_ENCRYPTION_ENABLED 1
+
+// Misma clave que en GCS_MAVLink.cpp
+extern const uint8_t encryption_key[32];
+
 #if AP_RADIO_ENABLED
 #include <AP_Radio/AP_Radio.h>
 #include <AP_BoardConfig/AP_BoardConfig.h>
@@ -1912,6 +1924,80 @@ void GCS_MAVLINK::packetReceived(const mavlink_status_t &status,
     handle_message(msg);
 }
 
+
+// Estructura para mensaje MAVLink con payload encriptado
+typedef struct {
+    uint8_t magic;
+    uint8_t len;
+    uint8_t incompat_flags;
+    uint8_t compat_flags;
+    uint8_t seq;
+    uint8_t sysid;
+    uint8_t compid;
+    uint8_t msgid[3];
+    uint8_t payload[255];
+    uint16_t checksum;
+    uint8_t signature[13];
+} __attribute__((packed)) mavlink_msg_encrypted_t;
+
+// DESENCRIPTAR payload de MAVLink
+static int decrypt_mavlink_payload(
+    mavlink_message_t *msg,
+    const uint8_t *key,
+    const uint8_t *iv,
+    const uint8_t *tag)
+{
+    EVP_CIPHER_CTX *ctx;
+    int len;
+    int plaintext_len;
+    int ret;
+
+    if(!(ctx = EVP_CIPHER_CTX_new()))
+        return -1;
+
+    if(1 != EVP_DecryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, key, iv)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    // AAD: Header (primeros 10 bytes)
+    uint8_t *aad = (uint8_t*)msg;
+    int aad_len = 10;
+
+    if(1 != EVP_DecryptUpdate(ctx, NULL, &len, aad, aad_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    // Desencriptar payload
+    mavlink_msg_encrypted_t *msg_enc = (mavlink_msg_encrypted_t*)msg;
+    uint8_t *ciphertext = msg_enc->payload;
+    int ciphertext_len = msg_enc->len;
+
+    if(1 != EVP_DecryptUpdate(ctx, ciphertext, &len, ciphertext, ciphertext_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    plaintext_len = len;
+
+    // Verificar tag
+    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_SET_TAG, 16, (void*)tag)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+
+    ret = EVP_DecryptFinal_ex(ctx, ciphertext + len, &len);
+    EVP_CIPHER_CTX_free(ctx);
+
+    if(ret > 0) {
+        plaintext_len += len;
+        return plaintext_len;
+    } else {
+        return -1;  // Tag inválido
+    }
+}
+
+
 void
 GCS_MAVLINK::update_receive(uint32_t max_time_us)
 {
@@ -1957,17 +2043,41 @@ GCS_MAVLINK::update_receive(uint32_t max_time_us)
 
         bool parsed_packet = false;
 
-        // Try to get a new message
         const uint8_t framing = mavlink_frame_char_buffer(channel_buffer(), channel_status(), c, &msg, &status);
         if (framing == MAVLINK_FRAMING_OK) {
-            hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
-            packetReceived(status, msg);
-            parsed_packet = true;
-            gcs_alternative_active[chan] = false;
-            alternative.last_mavlink_ms = now_ms;
-            hal.util->persistent_data.last_mavlink_msgid = 0;
 
-        }
+#ifdef MAVLINK_ENCRYPTION_ENABLED
+    // === DESCIFRADO AQUÍ ===
+    
+    // Extraer IV y Tag del final del mensaje
+    uint8_t *raw_msg = (uint8_t*)&msg;
+    uint8_t msg_len = msg.len + 10 + 2;  // payload + header + checksum
+    
+    uint8_t iv[12];
+    uint8_t tag[16];
+    
+    // Leer IV y Tag que vienen después del mensaje
+    memcpy(iv, raw_msg + msg_len, 12);
+    memcpy(tag, raw_msg + msg_len + 12, 16);
+    
+    // Descifrar el payload
+    if (decrypt_mavlink_payload(&msg, encryption_key, iv, tag) < 0) {
+        // Verificación falló - mensaje corrompido o clave incorrecta
+        // Descartar mensaje
+        continue;
+    }
+#endif
+    
+    // Procesar mensaje descifrado (o sin descifrar si ENCRYPTION_ENABLED = 0)
+    hal.util->persistent_data.last_mavlink_msgid = msg.msgid;
+    packetReceived(status, msg);
+    parsed_packet = true;
+    gcs_alternative_active[chan] = false;
+    alternative.last_mavlink_ms = now_ms;
+    hal.util->persistent_data.last_mavlink_msgid = 0;
+    
+}
+  
 #if AP_SCRIPTING_ENABLED
         else if (framing == MAVLINK_FRAMING_BAD_CRC) {
             // This may be a valid message that we don't know the crc extra for, pass it to scripting which might

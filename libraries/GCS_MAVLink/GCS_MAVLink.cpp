@@ -30,6 +30,13 @@ This provides some support code and variables for MAVLink enabled sketches
 #include <AP_Common/AP_Common.h>
 #include <AP_HAL/AP_HAL.h>
 
+//Mis includes
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/rand.h>
+
+#define MAVLINK_ENCRYPTION_ENABLED 1
+
 extern const AP_HAL::HAL& hal;
 
 #ifdef MAVLINK_SEPARATE_HELPERS
@@ -127,6 +134,94 @@ uint16_t comm_get_txspace(mavlink_channel_t chan)
     return link->txspace();
 }
 
+
+// Clave compartida (en producción usar gestión segura de claves)
+static const uint8_t encryption_key[32] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+    0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
+    0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f
+};
+
+// Estructura MAVLink compatible
+typedef struct {
+    uint8_t magic;
+    uint8_t len;
+    uint8_t incompat_flags;
+    uint8_t compat_flags;
+    uint8_t seq;
+    uint8_t sysid;
+    uint8_t compid;
+    uint8_t msgid[3];
+    uint8_t payload[255];
+    uint16_t checksum;
+    uint8_t signature[13];
+} __attribute__((packed)) mavlink_msg_encrypted_t;
+
+// ENCRIPTAR payload de MAVLink
+static int encrypt_mavlink_payload(
+    uint8_t *buf,              // Buffer del mensaje
+    uint8_t len,               // Longitud total del mensaje
+    const uint8_t *key,
+    uint8_t *iv_out,
+    uint8_t *tag_out)
+{
+    EVP_CIPHER_CTX *ctx;
+    int evp_len;
+    int ciphertext_len;
+    
+    mavlink_msg_encrypted_t *msg = (mavlink_msg_encrypted_t*)buf;
+    
+    // Generar IV único (96 bits)
+    if(1 != RAND_bytes(iv_out, 12)) {
+        return -1;
+    }
+    
+    if(!(ctx = EVP_CIPHER_CTX_new())) {
+        return -1;
+    }
+    
+    // Inicializar ChaCha20-Poly1305
+    if(1 != EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, key, iv_out)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    
+    // AAD: Header (primeros 10 bytes)
+    uint8_t *aad = buf;
+    int aad_len = 10;
+    
+    if(1 != EVP_EncryptUpdate(ctx, NULL, &evp_len, aad, aad_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    
+    // Cifrar payload in-place
+    uint8_t *plaintext = msg->payload;
+    int plaintext_len = msg->len;
+    
+    if(1 != EVP_EncryptUpdate(ctx, plaintext, &evp_len, plaintext, plaintext_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    ciphertext_len = evp_len;
+    
+    if(1 != EVP_EncryptFinal_ex(ctx, plaintext + evp_len, &evp_len)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    ciphertext_len += evp_len;
+    
+    // Obtener tag
+    if(1 != EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_AEAD_GET_TAG, 16, tag_out)) {
+        EVP_CIPHER_CTX_free(ctx);
+        return -1;
+    }
+    
+    EVP_CIPHER_CTX_free(ctx);
+    return ciphertext_len;
+}
+
 /*
   send a buffer out a MAVLink channel
  */
@@ -146,6 +241,56 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
         // an alternative protocol is active
         return;
     }
+    
+#ifdef MAVLINK_ENCRYPTION_ENABLED
+    // === CIFRADO AGREGADO AQUÍ ===
+    
+    // Buffer para mensaje cifrado + IV + Tag
+    uint8_t encrypted_buffer[300];  // Suficientemente grande
+    memcpy(encrypted_buffer, buf, len);
+    
+    uint8_t iv[12];
+    uint8_t tag[16];
+    
+    // Encriptar el payload
+    int encrypted_len = encrypt_mavlink_payload(
+        encrypted_buffer, 
+        len, 
+        encryption_key, 
+        iv, 
+        tag
+    );
+    
+    if (encrypted_len > 0) {
+        // Agregar IV y Tag al final del mensaje
+        memcpy(encrypted_buffer + len, iv, 12);
+        memcpy(encrypted_buffer + len + 12, tag, 16);
+        
+        // Enviar: mensaje_cifrado + IV (12) + Tag (16)
+        const size_t total_len = len + 28;  // +28 por IV y Tag
+        const size_t written = mavlink_comm_port[chan]->write(encrypted_buffer, total_len);
+        
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+        if (written < total_len && !mavlink_comm_port[chan]->is_write_locked()) {
+            AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, (unsigned)total_len);
+        }
+#else
+        (void)written;
+#endif
+    } else {
+        // Error en cifrado, enviar sin cifrar (fallback)
+        const size_t written = mavlink_comm_port[chan]->write(buf, len);
+#if CONFIG_HAL_BOARD == HAL_BOARD_SITL
+        if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
+            AP_HAL::panic("Short write on UART: %lu < %u", (unsigned long)written, len);
+        }
+#else
+        (void)written;
+#endif
+    }
+    
+#else
+    // === CÓDIGO ORIGINAL (SIN CIFRADO) ===
     const size_t written = mavlink_comm_port[chan]->write(buf, len);
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
     if (written < len && !mavlink_comm_port[chan]->is_write_locked()) {
@@ -154,6 +299,7 @@ void comm_send_buffer(mavlink_channel_t chan, const uint8_t *buf, uint8_t len)
 #else
     (void)written;
 #endif
+#endif  // MAVLINK_ENCRYPTION_ENABLED
 }
 
 /*
